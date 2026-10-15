@@ -51,7 +51,7 @@ function paint(){
  }
  boxes.append(layer,markerLayer);
 }
-function showItem(o){active=o;paint();const saved=favorites.some(f=>f.id===o.id);$('detailContent').innerHTML=`<h2>${esc(o.name)}</h2><img id="itemCrop" class="item-crop" alt="Cropped selected item"><span class="pill">● YELLOW · Evidence needed</span><p><strong>Resale value:</strong> Not researched<br><strong>Maker / age:</strong> Not established<br><strong>Authenticity:</strong> Not established<br><strong>Detection confidence:</strong> ${o.score===null?'Manually outlined':Math.round(o.score*100)+'% (generic object category only)'}</p><p><strong>Individual-object identification:</strong> analyze only the pixels inside this outline. Category guesses are not maker or authenticity verification.</p><div id="identityResult" class="identity-result">${o.identity?esc(o.identity.summary):'Not analyzed yet.'}</div><label for="itemName">Item description</label><input id="itemName" maxlength="140" value="${esc(o.name)}"><label for="itemNotes">Marks / details / notes</label><input id="itemNotes" value="${esc(o.notes||'')}" placeholder="e.g. makers mark under base"><div class="actions"><button id="identifyItem" class="primary">Identify this item</button><button id="saveFav" class="primary">${saved?'♥ Update favorite':'♡ Save favorite'}</button><button id="removeItem" class="secondary">Remove outline</button><button id="adjustItem" class="secondary">Redraw outline</button></div>`;$('detail').hidden=false;try{$('itemCrop').src=itemCrop(o).toDataURL('image/jpeg',.85)}catch{} $('identifyItem').onclick=()=>identify(o);$('itemName').oninput=e=>{o.name=e.target.value;paint()};$('itemNotes').oninput=e=>o.notes=e.target.value;$('saveFav').onclick=()=>{const f=favorites.findIndex(x=>x.id===o.id),record={...o,savedAt:new Date().toISOString()};if(f<0)favorites.push(record);else favorites[f]=record;try{localStorage.setItem(key,JSON.stringify(favorites));setStatus('Saved to favorites on this device.')}catch{setStatus('Unable to save favorites: browser storage is full.')}count();showItem(o)};$('removeItem').onclick=()=>{items=items.filter(x=>x!==o);$('detail').hidden=true;active=null;paint()};$('adjustItem').onclick=()=>{$('detail').hidden=true;active=null;items=items.filter(x=>x!==o);paint();toggleDraw(true);setStatus('Redraw the outline by dragging around the item.')}}
+function showItem(o){active=o;paint();const saved=favorites.some(f=>f.id===o.id);$('detailContent').innerHTML=`<h2>${esc(o.name)}</h2><img id="itemCrop" class="item-crop" alt="Cropped selected item"><span class="pill">● YELLOW · Evidence needed</span><p><strong>Resale value:</strong> Not researched<br><strong>Maker / age:</strong> Not established<br><strong>Authenticity:</strong> Not established<br><strong>Detection confidence:</strong> ${o.score===null?'Manually outlined':Math.round(o.score*100)+'% (generic object category only)'}</p><p><strong>Individual-object identification:</strong> analyze only the pixels inside this outline. Category guesses are not maker or authenticity verification.</p><div id="identityResult" class="identity-result">${o.identity?esc(o.identity.summary):'Not analyzed yet.'}</div><label for="itemName">Item description</label><input id="itemName" maxlength="140" value="${esc(o.name)}"><label for="itemNotes">Marks / details / notes</label><input id="itemNotes" value="${esc(o.notes||'')}" placeholder="e.g. makers mark under base"><div class="actions"><button id="identifyItem" class="primary">Identify this item</button><button id="saveFav" class="primary">${saved?'♥ Update favorite':'♡ Save favorite'}</button><button id="adjustItem" class="secondary">Redraw outline</button></div>`;$('detail').hidden=false;try{$('itemCrop').src=itemCrop(o).toDataURL('image/jpeg',.85)}catch{} $('identifyItem').onclick=()=>identify(o);$('itemName').oninput=e=>{o.name=e.target.value;paint()};$('itemNotes').oninput=e=>o.notes=e.target.value;$('saveFav').onclick=()=>{const f=favorites.findIndex(x=>x.id===o.id),record={...o,savedAt:new Date().toISOString()};if(f<0)favorites.push(record);else favorites[f]=record;try{localStorage.setItem(key,JSON.stringify(favorites));setStatus('Saved to favorites on this device.')}catch{setStatus('Unable to save favorites: browser storage is full.')}count();showItem(o)};$('adjustItem').onclick=()=>{$('detail').hidden=true;active=null;items=items.filter(x=>x!==o);paint();toggleDraw(true);setStatus('Redraw the outline by dragging around the item.')}}
 function reset(){items=[];$('detail').hidden=true;active=null;paint()};function add(name,score,x,y,w,h){items.push({id:uid(),name,score,x,y,w,h,notes:''})}
 // OWL-ViT zero-shot detector. Unlike COCO-SSD, it searches our collectible-specific prompts.
 let modelLoadPromise=null;
@@ -138,8 +138,77 @@ async function identify(o){
  finally{btn.disabled=false}
 }
 function nameFromPrompt(label){return label.replace(/^a (small |vintage |decorative |collectible )*/,'').replace(/^an /,'').replace(/^(ceramic|porcelain|glass|pottery) /,'$1 ')+' candidate';}
-function overlap(a,b){const ix=Math.max(0,Math.min(a.x+a.w,b.x+b.w)-Math.max(a.x,b.x)),iy=Math.max(0,Math.min(a.y+a.h,b.y+b.h)-Math.max(a.y,b.y));return ix*iy/(a.w*a.h+b.w*b.h-ix*iy||1)}
-function merge(preds){preds.sort((a,b)=>b.score-a.score);const out=[];for(const p of preds){if(out.some(q=>overlap(p,q)>.35))continue;out.push(p)}return out.slice(0,60)}
+function intersection(a,b){
+ const w=Math.max(0,Math.min(a.x+a.w,b.x+b.w)-Math.max(a.x,b.x));
+ const h=Math.max(0,Math.min(a.y+a.h,b.y+b.h)-Math.max(a.y,b.y));
+ return w*h;
+}
+function overlap(a,b){const ix=intersection(a,b);return ix/(a.w*a.h+b.w*b.h-ix||1)}
+function category(p){
+ const n=(p.name||'').toLowerCase();
+ if(/figurine|doll|statue|sculpture|ornament/.test(n))return 'figurine';
+ if(/mug|teacup|drinking cup|coffee cup/.test(n))return 'mug';
+ if(/vase|bowl|pitcher|teapot|jar|vessel|glass|pottery|candle|trinket box/.test(n))return 'vessel';
+ return 'other';
+}
+// Conservative physical-object filtering: compare region geometry and photo texture.
+// A near-blank region is NOT automatically empty (plain white mugs exist).
+// Only discard small, low-scoring candidates with almost no visual detail.
+function nearBlankRegion(p){
+ if(p.score>=.23)return false;
+ const sample=document.createElement('canvas');sample.width=24;sample.height=24;
+ try{
+  const ctx=sample.getContext('2d',{willReadFrequently:true});
+  ctx.drawImage(img,p.x,p.y,p.w,p.h,0,0,24,24);
+  const d=ctx.getImageData(0,0,24,24).data;
+  let sum=0,sum2=0,edges=0;
+  const vals=[];
+  for(let i=0;i<576;i++){
+   const k=i*4,v=.2126*d[k]+.7152*d[k+1]+.0722*d[k+2];
+   vals.push(v);sum+=v;sum2+=v*v;
+  }
+  for(let y=1;y<23;y++)for(let x=1;x<23;x++){
+   const i=y*24+x;
+   edges+=Math.abs(vals[i]-vals[i-1])+Math.abs(vals[i]-vals[i-24]);
+  }
+  const variance=sum2/576-(sum/576)**2;
+  return variance<75&&edges/(22*22)<7;
+ }catch{return false}
+ finally{sample.width=0;sample.height=0}
+}
+function looksLikeDecoration(child,parent){
+ // Only suppress an apparent *figurine* substantially inside an already-detected
+ // physical vessel/mug. Partial overlapping objects should remain separate.
+ if(category(child)!=='figurine'||!['mug','vessel'].includes(category(parent)))return false;
+ const small=child.w*child.h,large=parent.w*parent.h;
+ if(small>=large*.60||small<1)return false;
+ if(intersection(child,parent)/small<.82)return false;
+ // Do not suppress a potentially independent object extending clearly above a vessel.
+ if(child.y<parent.y+parent.h*.08)return false;
+ return true;
+}
+function merge(preds){
+ const sorted=preds.filter(p=>p&&p.w>0&&p.h>0).sort((a,b)=>b.score-a.score);
+ const accepted=[];let suppressed=0;
+ // First remove near-identical outlines across different prompts or scan passes.
+ for(const p of sorted){
+  const duplicate=accepted.some(q=>{
+   const same=overlap(p,q)>.50;
+   const ia=intersection(p,q),minArea=Math.min(p.w*p.h,q.w*q.h);
+   return same||(ia/minArea>.90&&Math.max(p.w*p.h,q.w*q.h)/minArea<1.55);
+  });
+  if(duplicate){suppressed++;continue}
+  accepted.push(p);
+ }
+ // Contained printed-art detections: use ALL candidates, not order of confidence.
+ const filtered=accepted.filter(p=>{
+  if(accepted.some(q=>q!==p&&looksLikeDecoration(p,q))){suppressed++;return false}
+  // Avoid rejecting plain white ceramics solely because they look featureless.
+  if(p.score<.15&&nearBlankRegion(p)){suppressed++;return false}
+  return true;
+ });
+ return {items:filtered.slice(0,60),suppressed};
+}
 async function detectPart(detector,sx,sy,sw,sh,maxside=768){
  const c=makeCanvas(sx,sy,sw,sh,maxside);
  try{
@@ -178,8 +247,9 @@ async function scan(){
     await new Promise(requestAnimationFrame);
    }
   }
-  for(const p of merge(found))add(p.name,p.score,p.x,p.y,p.w,p.h);
-  paint();setStatus(`OWL-ViT found ${items.length} tentative objects. Tap a box to inspect or redraw an inaccurate outline. No sold-price data is connected.`);
+  const result=merge(found);
+  for(const p of result.items)add(p.name,p.score,p.x,p.y,p.w,p.h);
+  paint();setStatus(`Found ${items.length} candidate items after filtering ${result.suppressed} likely duplicates or false positives. This filtering is experimental and may miss real objects. Tap any number to inspect an item. No sold-price data is connected.`);
  }catch(e){console.error(e);setStatus('OWL-ViT detection failed: '+(e?.message||String(e))+'. Try disabling closer inspection, use Wi-Fi, or draw items manually.');}
  finally{busy=false;$('scanBtn').disabled=false;}
 }
