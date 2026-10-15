@@ -31,11 +31,12 @@ function paint(){
  }
  boxes.append(layer);
 }
-function showItem(o){active=o;const saved=favorites.some(f=>f.id===o.id);$('detailContent').innerHTML=`<h2>${esc(o.name)}</h2><span class="pill">● YELLOW · Evidence needed</span><p><strong>Resale value:</strong> Not researched<br><strong>Maker / age:</strong> Not established<br><strong>Authenticity:</strong> Not established<br><strong>Detection confidence:</strong> ${o.score===null?'Manually outlined':Math.round(o.score*100)+'% (generic object category only)'}</p><p>This version tests <strong>object localization</strong>, not specific collectible identification. No verified sold prices are connected.</p><label for="itemName">Item description</label><input id="itemName" maxlength="140" value="${esc(o.name)}"><label for="itemNotes">Marks / details / notes</label><input id="itemNotes" value="${esc(o.notes||'')}" placeholder="e.g. makers mark under base"><div class="actions"><button id="saveFav" class="primary">${saved?'♥ Update favorite':'♡ Save favorite'}</button><button id="removeItem" class="secondary">Remove outline</button><button id="adjustItem" class="secondary">Redraw outline</button></div>`;$('detail').hidden=false;$('itemName').oninput=e=>{o.name=e.target.value;paint()};$('itemNotes').oninput=e=>o.notes=e.target.value;$('saveFav').onclick=()=>{const f=favorites.findIndex(x=>x.id===o.id),record={...o,savedAt:new Date().toISOString()};if(f<0)favorites.push(record);else favorites[f]=record;try{localStorage.setItem(key,JSON.stringify(favorites));setStatus('Saved to favorites on this device.')}catch{setStatus('Unable to save favorites: browser storage is full.')}count();showItem(o)};$('removeItem').onclick=()=>{items=items.filter(x=>x!==o);$('detail').hidden=true;paint()};$('adjustItem').onclick=()=>{$('detail').hidden=true;items=items.filter(x=>x!==o);paint();toggleDraw(true);setStatus('Redraw the outline by dragging around the item.')}}
+function showItem(o){active=o;const saved=favorites.some(f=>f.id===o.id);$('detailContent').innerHTML=`<h2>${esc(o.name)}</h2><img id="itemCrop" class="item-crop" alt="Cropped selected item"><span class="pill">● YELLOW · Evidence needed</span><p><strong>Resale value:</strong> Not researched<br><strong>Maker / age:</strong> Not established<br><strong>Authenticity:</strong> Not established<br><strong>Detection confidence:</strong> ${o.score===null?'Manually outlined':Math.round(o.score*100)+'% (generic object category only)'}</p><p><strong>Individual-object identification:</strong> analyze only the pixels inside this outline. Category guesses are not maker or authenticity verification.</p><div id="identityResult" class="identity-result">${o.identity?esc(o.identity.summary):'Not analyzed yet.'}</div><label for="itemName">Item description</label><input id="itemName" maxlength="140" value="${esc(o.name)}"><label for="itemNotes">Marks / details / notes</label><input id="itemNotes" value="${esc(o.notes||'')}" placeholder="e.g. makers mark under base"><div class="actions"><button id="identifyItem" class="primary">Identify this item</button><button id="saveFav" class="primary">${saved?'♥ Update favorite':'♡ Save favorite'}</button><button id="removeItem" class="secondary">Remove outline</button><button id="adjustItem" class="secondary">Redraw outline</button></div>`;$('detail').hidden=false;try{$('itemCrop').src=itemCrop(o).toDataURL('image/jpeg',.85)}catch{} $('identifyItem').onclick=()=>identify(o);$('itemName').oninput=e=>{o.name=e.target.value;paint()};$('itemNotes').oninput=e=>o.notes=e.target.value;$('saveFav').onclick=()=>{const f=favorites.findIndex(x=>x.id===o.id),record={...o,savedAt:new Date().toISOString()};if(f<0)favorites.push(record);else favorites[f]=record;try{localStorage.setItem(key,JSON.stringify(favorites));setStatus('Saved to favorites on this device.')}catch{setStatus('Unable to save favorites: browser storage is full.')}count();showItem(o)};$('removeItem').onclick=()=>{items=items.filter(x=>x!==o);$('detail').hidden=true;paint()};$('adjustItem').onclick=()=>{$('detail').hidden=true;items=items.filter(x=>x!==o);paint();toggleDraw(true);setStatus('Redraw the outline by dragging around the item.')}}
 function reset(){items=[];$('detail').hidden=true;paint()};function add(name,score,x,y,w,h){items.push({id:uid(),name,score,x,y,w,h,notes:''})}
 // OWL-ViT zero-shot detector. Unlike COCO-SSD, it searches our collectible-specific prompts.
 let modelLoadPromise=null;
 const prompts=[
+ 'a novelty ceramic coffee mug shaped like a cake','a whimsical cake-shaped ceramic mug','a ceramic mug with a handle','a mug shaped like a food item',
  'a ceramic coffee mug','a ceramic teacup','a drinking cup','a decorative ceramic figurine',
  'a small porcelain animal figurine','a porcelain doll','a collectible ceramic statue',
  'a decorative flower vase','a pottery vessel','a glass vase','a glass drinking cup',
@@ -59,6 +60,63 @@ async function getModel(){
  return modelLoadPromise;
 }
 function makeCanvas(sx,sy,sw,sh,maxside=768){const sc=Math.min(1,maxside/Math.max(sw,sh)),c=document.createElement('canvas');c.width=Math.max(1,Math.round(sw*sc));c.height=Math.max(1,Math.round(sh*sc));c.getContext('2d').drawImage(img,sx,sy,sw,sh,0,0,c.width,c.height);return c;}
+// Analyze only pixels inside the selected object's rectangle. No shelf context or padding.
+function itemCrop(o){
+ const w=img.naturalWidth,h=img.naturalHeight;
+ const x=Math.max(0,Math.min(w-1,Math.floor(o.x))),y=Math.max(0,Math.min(h-1,Math.floor(o.y)));
+ const cw=Math.max(1,Math.min(w-x,Math.ceil(o.w))),ch=Math.max(1,Math.min(h-y,Math.ceil(o.h)));
+ return makeCanvas(x,y,cw,ch,512);
+}
+const identityPrompts=[
+ ['Novelty mug','a novelty ceramic mug shaped like a cake or dessert'],
+ ['Mug','a ceramic coffee mug with a handle'],
+ ['Teacup','a porcelain teacup with a handle'],
+ ['Cup','a drinking cup'],
+ ['Bowl','a ceramic bowl'],
+ ['Vase','a decorative ceramic vase'],
+ ['Glassware','a glass drinking vessel'],
+ ['Figurine','a ceramic animal figurine'],
+ ['Figurine','a small porcelain decorative figurine'],
+ ['Doll','a collectible doll'],
+ ['Statue','a decorative statue or sculpture'],
+ ['Pottery','a piece of decorative pottery'],
+ ['Jar','a ceramic jar with a lid'],
+ ['Trinket box','a small decorative trinket box'],
+ ['Teapot','a ceramic teapot'],
+ ['Pitcher','a ceramic pitcher with a handle'],
+ ['Ornament','a decorative ornament'],
+ ['Other houseware','a household decoration']
+];
+async function identify(o){
+ const target=$('identityResult'),btn=$('identifyItem');btn.disabled=true;
+ target.textContent='Analyzing only this item’s cropped image…';
+ try{
+  const detector=await getModel(),crop=itemCrop(o);
+  let raw;
+  try{raw=await detector(crop.toDataURL('image/jpeg',.86),identityPrompts.map(x=>x[1]),{threshold:.04,top_k:45})}
+  finally{crop.width=0;crop.height=0}
+  // Keep candidate matches that substantially overlap the selected item crop.
+  const scores=new Map();
+  for(const hit of raw){
+   const idx=identityPrompts.findIndex(p=>p[1]===hit.label);if(idx<0)continue;
+   const group=identityPrompts[idx][0],score=Number(hit.score)||0;
+   scores.set(group,Math.max(score,scores.get(group)||0));
+  }
+  const ranked=[...scores].sort((a,b)=>b[1]-a[1]);
+  const best=ranked[0],runner=ranked[1];
+  // Weak/no matches are explicitly uncertain. These are relative visual matches,
+  // NOT calibrated probabilities of correct identity.
+  const uncertain=!best||best[1]<.10||(runner&&best[1]-runner[1]<.025);
+  const summary=uncertain?'Uncertain visual category. Take a closer photo or correct the description.':
+   'Likely visual category: '+best[0]+'. This is a tentative visual match, not a verified identification.';
+  o.identity={summary,candidates:ranked.slice(0,3).map(([name,score])=>({name,score})),uncertain};
+  // Do not overwrite manual edits; keep the original detection name to preserve evidence.
+  target.replaceChildren();
+  const message=document.createElement('p');message.textContent=summary;target.append(message);
+  if(ranked.length){const small=document.createElement('small');small.textContent='Other visual matches: '+ranked.slice(0,3).map(([name,score])=>name+' ('+Math.round(score*100)+' match score)').join(' · ')+'. Scores are not certainty percentages.';target.append(small)}
+ }catch(e){console.error(e);target.textContent='Item-only analysis unavailable: '+(e?.message||String(e))}
+ finally{btn.disabled=false}
+}
 function nameFromPrompt(label){return label.replace(/^a (small |vintage |decorative |collectible )*/,'').replace(/^an /,'').replace(/^(ceramic|porcelain|glass|pottery) /,'$1 ')+' candidate';}
 function overlap(a,b){const ix=Math.max(0,Math.min(a.x+a.w,b.x+b.w)-Math.max(a.x,b.x)),iy=Math.max(0,Math.min(a.y+a.h,b.y+b.h)-Math.max(a.y,b.y));return ix*iy/(a.w*a.h+b.w*b.h-ix*iy||1)}
 function merge(preds){preds.sort((a,b)=>b.score-a.score);const out=[];for(const p of preds){if(out.some(q=>overlap(p,q)>.35))continue;out.push(p)}return out.slice(0,60)}

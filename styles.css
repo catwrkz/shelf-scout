@@ -5,3 +5,8 @@
 /* v0.3: keep all overlay outlines inside the visible photo, not the page */
 .image-box-layer .item-box{pointer-events:auto}
 #boxes.draw-mode .image-box-layer .item-box{pointer-events:none}
+
+/* v0.5 individual-object research card */
+.item-crop{display:block;max-height:185px;max-width:100%;width:auto;margin:12px auto;border:1px solid #53636a;border-radius:12px;object-fit:contain;background:#0f161a}
+.identity-result{border:1px solid #53636a;background:#172126;padding:11px;border-radius:10px;font-size:13px;line-height:1.6;color:#e4ebed;margin-top:10px}
+.identity-result p{margin:0 0 8px}.identity-result small{color:#adbdc2}
