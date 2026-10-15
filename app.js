@@ -55,7 +55,6 @@ function showItem(o){active=o;paint();const saved=favorites.some(f=>f.id===o.id)
 function reset(){items=[];$('detail').hidden=true;active=null;paint()};function add(name,score,x,y,w,h){items.push({id:uid(),name,score,x,y,w,h,notes:''})}
 // OWL-ViT zero-shot detector. Unlike COCO-SSD, it searches our collectible-specific prompts.
 let modelLoadPromise=null;
-// Favor complete physical objects; printed pictures are not separate inventory items.
 const prompts=[
  'a novelty ceramic coffee mug shaped like a cake','a whimsical cake-shaped ceramic mug','a ceramic mug with a handle','a mug shaped like a food item',
  'a ceramic coffee mug','a ceramic teacup','a drinking cup','a decorative ceramic figurine',
@@ -139,34 +138,13 @@ async function identify(o){
  finally{btn.disabled=false}
 }
 function nameFromPrompt(label){return label.replace(/^a (small |vintage |decorative |collectible )*/,'').replace(/^an /,'').replace(/^(ceramic|porcelain|glass|pottery) /,'$1 ')+' candidate';}
-function area(b){return Math.max(0,b.w)*Math.max(0,b.h)}
-function intersection(a,b){return Math.max(0,Math.min(a.x+a.w,b.x+b.w)-Math.max(a.x,b.x))*Math.max(0,Math.min(a.y+a.h,b.y+b.h)-Math.max(a.y,b.y))}
-function overlap(a,b){const i=intersection(a,b);return i/(area(a)+area(b)-i||1)}
-function containedRatio(a,b){return intersection(a,b)/Math.max(1,Math.min(area(a),area(b)))}
-function isVessel(name){return /mug|cup|teacup|vase|jar|pitcher|bowl|pottery|teapot|drinking|vessel/i.test(name)}
-function isFigurine(name){return /figurine|statue|sculpture|doll|ornament/i.test(name)}
-// Conservative, geometry-only acceptance. Does NOT establish whether something
-// is a real 3D object. Reject weak detections and smaller likely duplicate parts.
-function merge(preds){
- const credible=preds.filter(p=>Number.isFinite(p.score)&&p.score>=.16 && area(p)>0);
- credible.sort((a,b)=>b.score-a.score);
- const out=[];
- for(const p of credible){
-  if(out.some(q=>overlap(p,q)>.32))continue;
-  // A tiny 'figurine' nested in a confidently detected vessel is often printed
-  // decoration. This rule may miss real nested objects, deliberately favoring precision.
-  if(out.some(q=>isVessel(q.name)&&isFigurine(p.name)&&containedRatio(p,q)>.76&&area(p)<area(q)*.67))continue;
-  // Broad small contained boxes often represent a part or duplicate of the same object.
-  if(out.some(q=>containedRatio(p,q)>.88 && area(p)<area(q)*.55))continue;
-  out.push(p);
- }
- return out.slice(0,45);
-}
+function overlap(a,b){const ix=Math.max(0,Math.min(a.x+a.w,b.x+b.w)-Math.max(a.x,b.x)),iy=Math.max(0,Math.min(a.y+a.h,b.y+b.h)-Math.max(a.y,b.y));return ix*iy/(a.w*a.h+b.w*b.h-ix*iy||1)}
+function merge(preds){preds.sort((a,b)=>b.score-a.score);const out=[];for(const p of preds){if(out.some(q=>overlap(p,q)>.35))continue;out.push(p)}return out.slice(0,60)}
 async function detectPart(detector,sx,sy,sw,sh,maxside=768){
  const c=makeCanvas(sx,sy,sw,sh,maxside);
  try{
   // Output coordinates refer to the submitted canvas, not the original photograph.
-  const raw=await detector(c.toDataURL('image/jpeg',.84),prompts,{threshold:0.14,top_k:75});
+  const raw=await detector(c.toDataURL('image/jpeg',.84),prompts,{threshold:0.085,top_k:75});
   const scalex=sw/c.width,scaley=sh/c.height,nw=img.naturalWidth,nh=img.naturalHeight;
   return raw.map(p=>{
    const bb=p.box||{},left=Number(bb.xmin),top=Number(bb.ymin),right=Number(bb.xmax),bottom=Number(bb.ymax);
@@ -179,6 +157,69 @@ async function detectPart(detector,sx,sy,sw,sh,maxside=768){
   }).filter(Boolean);
  }finally{c.width=0;c.height=0}
 }
+
+// v0.9: A LOCAL secondary screening pass. This is still OWL-ViT, not a true
+// physical-object classifier. It uses only the cropped candidate pixels and
+// conservative geometric evidence; doubtful detections are excluded.
+const validationLabels=[
+ 'a complete three-dimensional ceramic coffee mug',
+ 'a complete ceramic cup with a handle',
+ 'a complete three-dimensional porcelain figurine',
+ 'a complete small ceramic statue',
+ 'a complete decorative vase',
+ 'a complete ceramic bowl',
+ 'a complete decorative pottery object',
+ 'a complete glass cup or glass vessel',
+ 'a complete teapot or ceramic pitcher',
+ 'a complete freestanding decorative houseware object',
+ 'a two-dimensional printed illustration or picture',
+ 'a printed animal character on a ceramic mug',
+ 'a photograph of an animal or cartoon drawing',
+ 'empty space between objects on a shelf',
+ 'a dark background gap between mugs'
+];
+function boxIntersectionFraction(a,b){
+ const ix=Math.max(0,Math.min(a.x+a.w,b.x+b.w)-Math.max(a.x,b.x));
+ const iy=Math.max(0,Math.min(a.y+a.h,b.y+b.h)-Math.max(a.y,b.y));
+ return ix*iy/Math.max(1,a.w*a.h);
+}
+async function validateCandidate(detector,p){
+ // Do not use shelf context: inspect only candidate rectangle.
+ const c=makeCanvas(p.x,p.y,p.w,p.h,384);
+ try {
+  let raw=await detector(c.toDataURL('image/jpeg',.8),validationLabels,{threshold:.035,top_k:24});
+  let positives=[],negative=[];
+  for(const hit of raw){
+   const i=validationLabels.indexOf(hit.label);if(i<0)continue;
+   const b=hit.box||{},x=Number(b.xmin),y=Number(b.ymin),xr=Number(b.xmax),yb=Number(b.ymax);
+   if(![x,y,xr,yb].every(Number.isFinite))continue;
+   const area=Math.max(0,xr-x)*Math.max(0,yb-y);
+   const coverage=area/(c.width*c.height);
+   const centreX=(x+xr)/2/c.width,centreY=(y+yb)/2/c.height;
+   // Positive evidence must cover a meaningful part of the crop and sit near centre.
+   const centred=centreX>.18&&centreX<.82&&centreY>.18&&centreY<.82;
+   if(i<10&&coverage>.21&&centred)positives.push(Number(hit.score)||0);
+   if(i>=10&&coverage>.12)negative.push(Number(hit.score)||0);
+  }
+  const positive=Math.max(0,...positives),bad=Math.max(0,...negative);
+  // If a model cannot confirm a complete item, err on the side of rejecting it.
+  // Relative scores are ranking signals, NOT calibrated class probabilities.
+  return {keep:positive>=.075 && positive>=bad*1.12,positive,bad};
+ }finally{c.width=0;c.height=0}
+}
+function suppressContainedDuplicates(preds){
+ const ranked=[...preds].sort((a,b)=>b.score-a.score),result=[];
+ for(const p of ranked){
+  const nested=result.some(q=>{
+   const inside=boxIntersectionFraction(p,q);
+   const size=(p.w*p.h)/(q.w*q.h);
+   return inside>.83 && size<.57;
+  });
+  if(!nested)result.push(p);
+ }
+ return result;
+}
+
 async function scan(){
  if(busy)return;busy=true;$('scanBtn').disabled=true;
  try{
@@ -200,8 +241,21 @@ async function scan(){
     await new Promise(requestAnimationFrame);
    }
   }
-  for(const p of merge(found))add(p.name,p.score,p.x,p.y,p.w,p.h);
-  paint();setStatus(`Conservative scan kept ${items.length} of ${found.length} candidate detections. Some real items may be omitted. No sold-price data is connected.`);
+  const candidates=suppressContainedDuplicates(merge(found));
+  // Limit second-pass work to protect iPhone memory, battery and wait time.
+  // Reject unvalidated detections rather than asserting they are real objects.
+  const cap=12,checked=candidates.slice(0,cap),accepted=[];
+  let rejected=candidates.length-checked.length,errors=0;
+  for(let i=0;i<checked.length;i++){
+   setStatus(`Locally checking physical objects ${i+1}/${checked.length}… No images are uploaded.`);
+   try{
+    const validity=await validateCandidate(m,checked[i]);
+    if(validity.keep)accepted.push(checked[i]);else rejected++;
+   }catch(e){console.warn('Candidate validation failed',e);errors++;rejected++}
+   await new Promise(resolve=>requestAnimationFrame(resolve));
+  }
+  for(const p of accepted)add(p.name,p.score,p.x,p.y,p.w,p.h);
+  paint();setStatus(`Local validation retained ${items.length} of ${candidates.length} candidates; withheld ${rejected} uncertain detections${errors?' ('+errors+' validation errors)':''}. This is experimental; missing items can be outlined manually. No sold-price data is connected.`);
  }catch(e){console.error(e);setStatus('OWL-ViT detection failed: '+(e?.message||String(e))+'. Try disabling closer inspection, use Wi-Fi, or draw items manually.');}
  finally{busy=false;$('scanBtn').disabled=false;}
 }
