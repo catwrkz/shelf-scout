@@ -10,3 +10,18 @@
 .item-crop{display:block;max-height:185px;max-width:100%;width:auto;margin:12px auto;border:1px solid #53636a;border-radius:12px;object-fit:contain;background:#0f161a}
 .identity-result{border:1px solid #53636a;background:#172126;padding:11px;border-radius:10px;font-size:13px;line-height:1.6;color:#e4ebed;margin-top:10px}
 .identity-result p{margin:0 0 8px}.identity-result small{color:#adbdc2}
+
+/* v0.6 compact numeric markers and selection */
+#boxes{z-index:1}
+.image-box-layer .item-box{border-width:2px;background:rgba(248,196,51,.045);transition:opacity .12s,border-color .12s,background .12s}
+.image-box-layer .item-box.is-selected{border-width:4px;border-color:#ffe177;background:rgba(255,225,119,.13);z-index:5;box-shadow:0 0 0 2px #101519,0 0 14px #ffe177a6}
+.image-box-layer .item-box.is-dimmed{opacity:.30}
+.marker-layer{position:absolute;inset:0;pointer-events:none}
+.item-marker{position:absolute;pointer-events:auto;min-width:25px;height:25px;padding:0 5px;display:grid;place-items:center;background:#f8c433;color:#141819;font-size:12px;font-weight:850;border-radius:7px;line-height:1;box-shadow:0 2px 8px #000b;z-index:3;touch-action:manipulation}
+.item-marker.is-selected{background:#ffe177;outline:2px solid #fff;z-index:9;transform:scale(1.1)}
+.item-marker.is-dimmed{opacity:.42}
+.item-marker:focus-visible{outline:3px solid #fff}
+#boxes.draw-mode .marker-layer{pointer-events:none}
+#boxes.draw-mode .marker-layer .item-marker{pointer-events:none}
+/* Keep info and controls visually above number markers in the letterbox. */
+.topbar,.status,.bottom{z-index:3}

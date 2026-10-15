@@ -12,27 +12,47 @@ function metrics(){
  const w=nw*scale,h=nh*scale;
  return {x:outer.left-parent.left+(outer.width-w)/2,y:outer.top-parent.top+(outer.height-h)/2,w,h,nw,nh};
 }
+// v0.6: item rectangles are clipped to the photo, but numbered markers live in
+// a separate overlay so they can extend into the surrounding letterbox area.
 function paint(){
  boxes.replaceChildren();const m=metrics();if(!m)return;
- // Put each rectangle in a clipped overlay aligned to the *visible image*, not the viewport.
- // This prevents any detector output, including out-of-bounds output, from spilling onto controls.
  const layer=document.createElement('div');layer.className='image-box-layer';
  Object.assign(layer.style,{position:'absolute',left:m.x+'px',top:m.y+'px',width:m.w+'px',height:m.h+'px',overflow:'hidden',pointerEvents:'none'});
- for(const o of items){
+ const markerLayer=document.createElement('div');markerLayer.className='marker-layer';
+ const selected=active&&items.includes(active)?active:null;
+ const viewportWidth=boxes.clientWidth,viewportHeight=boxes.clientHeight;
+ for(let i=0;i<items.length;i++){
+  const o=items[i];
   let x=Math.max(0,Math.min(m.nw,Number(o.x))),y=Math.max(0,Math.min(m.nh,Number(o.y)));
   let right=Math.max(x,Math.min(m.nw,Number(o.x)+Number(o.w)));
   let bottom=Math.max(y,Math.min(m.nh,Number(o.y)+Number(o.h)));
   if(![x,y,right,bottom].every(Number.isFinite)||right-x<3||bottom-y<3)continue;
-  const b=document.createElement('button');b.className='item-box';
+  const isSelected=selected===o;
+  const b=document.createElement('button');
+  b.className='item-box'+(selected?(isSelected?' is-selected':' is-dimmed'):'');
   Object.assign(b.style,{left:x/m.nw*100+'%',top:y/m.nh*100+'%',width:(right-x)/m.nw*100+'%',height:(bottom-y)/m.nh*100+'%'});
-  b.setAttribute('aria-label','Inspect item '+o.name);
-  const label=document.createElement('span');label.textContent=o.name;b.append(label);
-  b.onclick=()=>{if(!draw)showItem(o)};layer.append(b);
+  b.setAttribute('aria-label','Inspect item '+(i+1)+': '+o.name);
+  b.setAttribute('aria-pressed',String(isSelected));
+  b.onclick=()=>{if(!draw)showItem(o)};
+  layer.append(b);
+  const marker=document.createElement('button');
+  marker.type='button';marker.className='item-marker'+(selected?(isSelected?' is-selected':' is-dimmed'):'');
+  marker.textContent=String(i+1);marker.title=o.name;
+  marker.setAttribute('aria-label','Inspect item '+(i+1)+': '+o.name);
+  marker.setAttribute('aria-pressed',String(isSelected));
+  // Place the number above the object, even if that means outside the photo.
+  // Clamp only to the viewer, never to the image rectangle.
+  const left=Math.max(3,Math.min(viewportWidth-37,m.x+x/m.nw*m.w));
+  const preferredTop=m.y+y/m.nh*m.h-26;
+  const top=Math.max(4,Math.min(viewportHeight-25,preferredTop));
+  Object.assign(marker.style,{left:left+'px',top:top+'px'});
+  marker.onclick=()=>{if(!draw)showItem(o)};
+  markerLayer.append(marker);
  }
- boxes.append(layer);
+ boxes.append(layer,markerLayer);
 }
-function showItem(o){active=o;const saved=favorites.some(f=>f.id===o.id);$('detailContent').innerHTML=`<h2>${esc(o.name)}</h2><img id="itemCrop" class="item-crop" alt="Cropped selected item"><span class="pill">● YELLOW · Evidence needed</span><p><strong>Resale value:</strong> Not researched<br><strong>Maker / age:</strong> Not established<br><strong>Authenticity:</strong> Not established<br><strong>Detection confidence:</strong> ${o.score===null?'Manually outlined':Math.round(o.score*100)+'% (generic object category only)'}</p><p><strong>Individual-object identification:</strong> analyze only the pixels inside this outline. Category guesses are not maker or authenticity verification.</p><div id="identityResult" class="identity-result">${o.identity?esc(o.identity.summary):'Not analyzed yet.'}</div><label for="itemName">Item description</label><input id="itemName" maxlength="140" value="${esc(o.name)}"><label for="itemNotes">Marks / details / notes</label><input id="itemNotes" value="${esc(o.notes||'')}" placeholder="e.g. makers mark under base"><div class="actions"><button id="identifyItem" class="primary">Identify this item</button><button id="saveFav" class="primary">${saved?'♥ Update favorite':'♡ Save favorite'}</button><button id="removeItem" class="secondary">Remove outline</button><button id="adjustItem" class="secondary">Redraw outline</button></div>`;$('detail').hidden=false;try{$('itemCrop').src=itemCrop(o).toDataURL('image/jpeg',.85)}catch{} $('identifyItem').onclick=()=>identify(o);$('itemName').oninput=e=>{o.name=e.target.value;paint()};$('itemNotes').oninput=e=>o.notes=e.target.value;$('saveFav').onclick=()=>{const f=favorites.findIndex(x=>x.id===o.id),record={...o,savedAt:new Date().toISOString()};if(f<0)favorites.push(record);else favorites[f]=record;try{localStorage.setItem(key,JSON.stringify(favorites));setStatus('Saved to favorites on this device.')}catch{setStatus('Unable to save favorites: browser storage is full.')}count();showItem(o)};$('removeItem').onclick=()=>{items=items.filter(x=>x!==o);$('detail').hidden=true;paint()};$('adjustItem').onclick=()=>{$('detail').hidden=true;items=items.filter(x=>x!==o);paint();toggleDraw(true);setStatus('Redraw the outline by dragging around the item.')}}
-function reset(){items=[];$('detail').hidden=true;paint()};function add(name,score,x,y,w,h){items.push({id:uid(),name,score,x,y,w,h,notes:''})}
+function showItem(o){active=o;paint();const saved=favorites.some(f=>f.id===o.id);$('detailContent').innerHTML=`<h2>${esc(o.name)}</h2><img id="itemCrop" class="item-crop" alt="Cropped selected item"><span class="pill">● YELLOW · Evidence needed</span><p><strong>Resale value:</strong> Not researched<br><strong>Maker / age:</strong> Not established<br><strong>Authenticity:</strong> Not established<br><strong>Detection confidence:</strong> ${o.score===null?'Manually outlined':Math.round(o.score*100)+'% (generic object category only)'}</p><p><strong>Individual-object identification:</strong> analyze only the pixels inside this outline. Category guesses are not maker or authenticity verification.</p><div id="identityResult" class="identity-result">${o.identity?esc(o.identity.summary):'Not analyzed yet.'}</div><label for="itemName">Item description</label><input id="itemName" maxlength="140" value="${esc(o.name)}"><label for="itemNotes">Marks / details / notes</label><input id="itemNotes" value="${esc(o.notes||'')}" placeholder="e.g. makers mark under base"><div class="actions"><button id="identifyItem" class="primary">Identify this item</button><button id="saveFav" class="primary">${saved?'♥ Update favorite':'♡ Save favorite'}</button><button id="removeItem" class="secondary">Remove outline</button><button id="adjustItem" class="secondary">Redraw outline</button></div>`;$('detail').hidden=false;try{$('itemCrop').src=itemCrop(o).toDataURL('image/jpeg',.85)}catch{} $('identifyItem').onclick=()=>identify(o);$('itemName').oninput=e=>{o.name=e.target.value;paint()};$('itemNotes').oninput=e=>o.notes=e.target.value;$('saveFav').onclick=()=>{const f=favorites.findIndex(x=>x.id===o.id),record={...o,savedAt:new Date().toISOString()};if(f<0)favorites.push(record);else favorites[f]=record;try{localStorage.setItem(key,JSON.stringify(favorites));setStatus('Saved to favorites on this device.')}catch{setStatus('Unable to save favorites: browser storage is full.')}count();showItem(o)};$('removeItem').onclick=()=>{items=items.filter(x=>x!==o);$('detail').hidden=true;active=null;paint()};$('adjustItem').onclick=()=>{$('detail').hidden=true;active=null;items=items.filter(x=>x!==o);paint();toggleDraw(true);setStatus('Redraw the outline by dragging around the item.')}}
+function reset(){items=[];$('detail').hidden=true;active=null;paint()};function add(name,score,x,y,w,h){items.push({id:uid(),name,score,x,y,w,h,notes:''})}
 // OWL-ViT zero-shot detector. Unlike COCO-SSD, it searches our collectible-specific prompts.
 let modelLoadPromise=null;
 const prompts=[
@@ -170,5 +190,5 @@ function toggleDraw(on){draw=on;boxes.classList.toggle('draw-mode',draw);boxes.s
 $('addBtn').onclick=()=>{if(img.hidden){setStatus('Capture or upload a photo first.');return}toggleDraw(!draw);setStatus(draw?'Drag a rectangle around an individual item.':'Drawing canceled.')};
 function imagePoint(e){const m=metrics();if(!m)return null;return{x:Math.max(0,Math.min(m.nw,(e.clientX-boxes.getBoundingClientRect().left-m.x)/m.w*m.nw)),y:Math.max(0,Math.min(m.nh,(e.clientY-boxes.getBoundingClientRect().top-m.y)/m.h*m.nh))}}
 boxes.addEventListener('pointerdown',e=>{if(!draw)return;e.preventDefault();drawOrigin=imagePoint(e);boxes.setPointerCapture(e.pointerId)});boxes.addEventListener('pointerup',e=>{if(!drawOrigin)return;const p=imagePoint(e);if(!p){drawOrigin=null;return}const x=Math.min(drawOrigin.x,p.x),y=Math.min(drawOrigin.y,p.y),w=Math.abs(p.x-drawOrigin.x),h=Math.abs(p.y-drawOrigin.y);drawOrigin=null;toggleDraw(false);if(w<10||h<10)return;add('Unidentified collectible',null,x,y,w,h);paint();showItem(items[items.length-1]);setStatus('Manual outline added. Edit its label in the research card.')});
-$('closeDetail').onclick=()=>$('detail').hidden=true;$('help').onclick=()=>$('about').showModal();$('closeAbout').onclick=()=>$('about').close();$('favoritesBtn').onclick=()=>{if(!favorites.length){setStatus('No favorites saved.');return}alert('Favorites saved on this browser:\n\n'+favorites.map((f,i)=>`${i+1}. ${f.name}${f.notes?' — '+f.notes:''}`).join('\n'))};window.addEventListener('resize',paint);img.addEventListener('load',paint);
+$('closeDetail').onclick=()=>{active=null;$('detail').hidden=true;paint()};$('help').onclick=()=>$('about').showModal();$('closeAbout').onclick=()=>$('about').close();$('favoritesBtn').onclick=()=>{if(!favorites.length){setStatus('No favorites saved.');return}alert('Favorites saved on this browser:\n\n'+favorites.map((f,i)=>`${i+1}. ${f.name}${f.notes?' — '+f.notes:''}`).join('\n'))};window.addEventListener('resize',paint);img.addEventListener('load',paint);
 })();
