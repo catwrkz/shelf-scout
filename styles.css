@@ -25,3 +25,8 @@
 #boxes.draw-mode .marker-layer .item-marker{pointer-events:none}
 /* Keep info and controls visually above number markers in the letterbox. */
 .topbar,.status,.bottom{z-index:3}
+
+/* v1.0 progressive candidate validation: dashed until checked */
+.image-box-layer .item-box.is-pending{border-style:dashed;border-width:2px;background:rgba(248,196,51,.025);box-shadow:none}
+.item-marker.is-pending{background:#3a3421;color:#ffe094;border:2px dashed #f8c433}
+.image-box-layer .item-box.is-pending.is-selected{border-style:dashed;border-color:#ffe177}
