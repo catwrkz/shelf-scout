@@ -36,3 +36,10 @@
 .category-matches{list-style:decimal;margin:0 0 10px;padding:0 0 0 24px}
 .category-matches li{display:flex;justify-content:space-between;align-items:baseline;gap:12px;padding:6px 0;border-bottom:1px solid #5261685c;color:#e7edee}
 .category-matches li span{min-width:0;flex:1}.category-matches li strong{white-space:nowrap;color:#f7d875;font-size:12px;font-weight:700}
+
+/* v1.3 photo-first visual lookup workflow */
+.visual-search{margin:16px 0;padding:14px;border:1px solid #59676e;border-radius:12px;background:#1b282e}
+.visual-search h3{font-size:15px;margin:0 0 8px}.visual-search p{font-size:12px;line-height:1.5;color:#b5c5c9;margin:5px 0 12px}
+.visual-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.visual-actions button{font-size:12px;padding:11px 7px;min-height:44px}
+.visual-search .visual-help{color:#e6d4a0;margin-top:12px}
