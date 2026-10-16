@@ -51,7 +51,7 @@ function paint(){
  }
  boxes.append(layer,markerLayer);
 }
-function showItem(o){active=o;paint();const saved=favorites.some(f=>f.id===o.id);$('detailContent').innerHTML=`<h2>${esc(o.name)}</h2><img id="itemCrop" class="item-crop" alt="Cropped selected item"><span class="pill">${o.pending?'◌ TENTATIVE · Awaiting local validation':'● YELLOW · Evidence needed'}</span><p><strong>Resale value:</strong> Not researched<br><strong>Maker / age:</strong> Not established<br><strong>Authenticity:</strong> Not established<br><strong>Detection confidence:</strong> ${o.score===null?'Manually outlined':Math.round(o.score*100)+'% (generic object category only)'}</p><p><strong>Individual-object identification:</strong> analyze only the pixels inside this outline. Category guesses are not maker or authenticity verification.</p><div id="identityResult" class="identity-result">${o.identity?esc(o.identity.summary):o.identifying?'Automatic category identification in progress…':'Awaiting automatic identification.'}</div><label for="itemName">Item description</label><input id="itemName" maxlength="140" value="${esc(o.name)}"><label for="itemNotes">Marks / details / notes</label><input id="itemNotes" value="${esc(o.notes||'')}" placeholder="e.g. makers mark under base"><div class="actions"><button id="identifyItem" class="primary">Identify this item</button><button id="saveFav" class="primary">${saved?'♥ Update favorite':'♡ Save favorite'}</button><button id="removeItem" class="secondary">Remove outline</button><button id="adjustItem" class="secondary">Redraw outline</button></div>`;$('detail').hidden=false;try{$('itemCrop').src=itemCrop(o).toDataURL('image/jpeg',.85)}catch{} $('identifyItem').onclick=()=>identify(o);$('itemName').oninput=e=>{o.name=e.target.value;paint()};$('itemNotes').oninput=e=>o.notes=e.target.value;$('saveFav').onclick=()=>{const f=favorites.findIndex(x=>x.id===o.id),record={...o,savedAt:new Date().toISOString()};if(f<0)favorites.push(record);else favorites[f]=record;try{localStorage.setItem(key,JSON.stringify(favorites));setStatus('Saved to favorites on this device.')}catch{setStatus('Unable to save favorites: browser storage is full.')}count();showItem(o)};$('removeItem').onclick=()=>{items=items.filter(x=>x!==o);$('detail').hidden=true;active=null;paint()};$('adjustItem').onclick=()=>{$('detail').hidden=true;active=null;items=items.filter(x=>x!==o);paint();toggleDraw(true);setStatus('Redraw the outline by dragging around the item.')}}
+function showItem(o){active=o;paint();const saved=favorites.some(f=>f.id===o.id);$('detailContent').innerHTML=`<h2>${esc(o.name)}</h2><img id="itemCrop" class="item-crop" alt="Cropped selected item"><span class="pill">${o.pending?'◌ TENTATIVE · Awaiting local validation':'● YELLOW · Evidence needed'}</span><p><strong>Resale value:</strong> Not researched<br><strong>Maker / age:</strong> Not established<br><strong>Authenticity:</strong> Not established<br><strong>Detection confidence:</strong> ${o.score===null?'Manually outlined':Math.round(o.score*100)+'% (generic object category only)'}</p><p><strong>Individual-object identification:</strong> analyze only the pixels inside this outline. Category guesses are not maker or authenticity verification.</p><div id="identityResult" class="identity-result">${o.identity?esc(o.identity.summary):o.identifying?'Automatic category identification in progress…':'Awaiting automatic identification.'}</div><label for="itemName">Item description</label><input id="itemName" maxlength="140" value="${esc(o.name)}"><label for="itemNotes">Marks / details / notes</label><input id="itemNotes" value="${esc(o.notes||'')}" placeholder="e.g. makers mark under base"><div class="actions"><button id="identifyItem" class="primary">Identify this item</button><button id="saveFav" class="primary">${saved?'♥ Update favorite':'♡ Save favorite'}</button><button id="removeItem" class="secondary">Remove outline</button><button id="adjustItem" class="secondary">Redraw outline</button></div>`;$('detail').hidden=false;if(o.identity)renderIdentity($('identityResult'),o.identity);try{$('itemCrop').src=itemCrop(o).toDataURL('image/jpeg',.85)}catch{} $('identifyItem').onclick=()=>identify(o);$('itemName').oninput=e=>{o.name=e.target.value;paint()};$('itemNotes').oninput=e=>o.notes=e.target.value;$('saveFav').onclick=()=>{const f=favorites.findIndex(x=>x.id===o.id),record={...o,savedAt:new Date().toISOString()};if(f<0)favorites.push(record);else favorites[f]=record;try{localStorage.setItem(key,JSON.stringify(favorites));setStatus('Saved to favorites on this device.')}catch{setStatus('Unable to save favorites: browser storage is full.')}count();showItem(o)};$('removeItem').onclick=()=>{items=items.filter(x=>x!==o);$('detail').hidden=true;active=null;paint()};$('adjustItem').onclick=()=>{$('detail').hidden=true;active=null;items=items.filter(x=>x!==o);paint();toggleDraw(true);setStatus('Redraw the outline by dragging around the item.')}}
 function reset(){scanEpoch++;items=[];$('detail').hidden=true;active=null;paint()};function add(name,score,x,y,w,h,pending=false){const entry={id:uid(),name,score,x,y,w,h,notes:'',pending};items.push(entry);return entry}
 // OWL-ViT zero-shot detector. Unlike COCO-SSD, it searches our collectible-specific prompts.
 let modelLoadPromise=null;
@@ -121,10 +121,35 @@ async function classifyCrop(o){
  }
  const ranked=[...scores].sort((a,b)=>b[1]-a[1]);
  const best=ranked[0],runner=ranked[1];
- const uncertain=!best||best[1]<.10||(runner&&best[1]-runner[1]<.025);
- const summary=uncertain?'Visual category uncertain. A clearer close-up is needed.':
-  'Tentative visual category: '+best[0]+'. Maker, pattern, age, and authenticity remain unverified.';
- return {summary,candidates:ranked.slice(0,3).map(([name,score])=>({name,score})),uncertain};
+ // Scores are zero-shot detection matches, not class probabilities.
+ // Display alternative labels when the evidence doesn't clearly favor one.
+ const uncertain=!best||best[1]<.15||Boolean(runner&&(
+  best[1]-runner[1]<.055 || runner[1]>=best[1]*.84));
+ const candidates=ranked.slice(0,3).map(([name,score])=>({name,score}));
+ const summary=!best?'No usable category matches. Try a closer photo.':
+   uncertain?'Category uncertain — these are the strongest visual matches, not verified identifications.':
+   'Most likely visual category: '+best[0]+'. Other plausible matches are listed below.';
+ return {summary,candidates,uncertain};
+}
+function renderIdentity(target,identity){
+ target.replaceChildren();
+ const message=document.createElement('p');
+ message.textContent=identity.summary;target.append(message);
+ if(identity.candidates&&identity.candidates.length){
+  const heading=document.createElement('div');heading.className='identity-heading';
+  heading.textContent=identity.uncertain?'Top plausible categories':'Visual category matches';target.append(heading);
+  const list=document.createElement('ol');list.className='category-matches';
+  for(const [index,c] of identity.candidates.entries()){
+   const li=document.createElement('li');
+   const label=document.createElement('span');label.textContent=c.name;
+   const score=document.createElement('strong');score.textContent=(c.score*100).toFixed(1)+' match';
+   li.append(label,score);list.append(li);
+  }
+  target.append(list);
+  const explanation=document.createElement('small');
+  explanation.textContent='Match scores rank visual similarities from this model; they are NOT percentages of certainty. Maker, age, authenticity and resale price are unverified.';
+  target.append(explanation);
+ }
 }
 async function identify(o,automatic=false){
  if(o.identifying)return;
@@ -139,8 +164,8 @@ async function identify(o,automatic=false){
   o.identity=identity;
   if(isDisplayed()){
    target=$('identityResult');target.replaceChildren();
-   const message=document.createElement('p');message.textContent=identity.summary;target.append(message);
-   if(identity.candidates.length){const small=document.createElement('small');small.textContent='Visual matches: '+identity.candidates.map(c=>c.name+' ('+Math.round(c.score*100)+' match score)').join(' · ')+'. Scores are not certainty percentages.';target.append(small)}
+   renderIdentity(target,identity);
+
   }
  }catch(e){console.warn('Local identification failed',e);if(isDisplayed())$('identityResult').textContent='Local category analysis unavailable: '+(e?.message||String(e));}
  finally{o.identifying=false;if(isDisplayed())$('identifyItem').disabled=false;}

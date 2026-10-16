@@ -30,3 +30,9 @@
 .image-box-layer .item-box.is-pending{border-style:dashed;border-width:2px;background:rgba(248,196,51,.025);box-shadow:none}
 .item-marker.is-pending{background:#3a3421;color:#ffe094;border:2px dashed #f8c433}
 .image-box-layer .item-box.is-pending.is-selected{border-style:dashed;border-color:#ffe177}
+
+/* v1.2 readable alternative categories and model-match scores */
+.identity-heading{font-size:12px;font-weight:750;color:#f2f5f5;margin:12px 0 6px}
+.category-matches{list-style:decimal;margin:0 0 10px;padding:0 0 0 24px}
+.category-matches li{display:flex;justify-content:space-between;align-items:baseline;gap:12px;padding:6px 0;border-bottom:1px solid #5261685c;color:#e7edee}
+.category-matches li span{min-width:0;flex:1}.category-matches li strong{white-space:nowrap;color:#f7d875;font-size:12px;font-weight:700}
