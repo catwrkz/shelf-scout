@@ -43,3 +43,19 @@
 .visual-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px}
 .visual-actions button{font-size:12px;padding:11px 7px;min-height:44px}
 .visual-search .visual-help{color:#e6d4a0;margin-top:12px}
+
+/* v1.3.1 - embedded official Google search UI */
+.google-panel[hidden]{display:none!important}
+.google-panel{position:fixed;inset:0;z-index:40;background:#1c252a;color:#eaf1f2;overflow-y:auto;overscroll-behavior:contain;padding:calc(env(safe-area-inset-top) + 16px) 16px calc(env(safe-area-inset-bottom) + 22px);font-size:14px}
+.google-panel-head{display:flex;justify-content:space-between;align-items:center;font-size:19px}
+.google-panel label{display:block;margin:13px 0 7px;font-size:13px}
+.google-panel textarea,.google-panel input{width:100%;background:#111b20;border:1px solid #65747a;color:white;border-radius:10px;padding:11px;font:inherit}
+.google-panel a{color:#d5f56a}
+.google-panel button{font-size:13px;padding:11px 12px}
+.google-search-actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
+.google-panel details{border:1px solid #475962;border-radius:10px;padding:12px;margin-top:16px}
+.google-panel summary{font-weight:700;cursor:pointer}
+.google-panel p{line-height:1.6;color:#c4d2d6}
+#googleMessage{padding:10px;background:#27343a;border-radius:9px}
+#googleResults{background:white;color:#111;border-radius:10px;min-height:90px;overflow:hidden;margin-top:12px;padding:4px}
+.visual-actions button:last-child{grid-column:1 / -1}

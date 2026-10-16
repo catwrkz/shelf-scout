@@ -51,7 +51,71 @@ function paint(){
  }
  boxes.append(layer,markerLayer);
 }
-function showItem(o){active=o;paint();const saved=favorites.some(f=>f.id===o.id);$('detailContent').innerHTML=`<h2>${esc(o.name)}</h2><img id="itemCrop" class="item-crop" alt="Cropped selected item"><span class="pill">${o.pending?'◌ TENTATIVE · Awaiting local validation':'● YELLOW · Evidence needed'}</span><p><strong>Resale value:</strong> Not researched<br><strong>Maker / age:</strong> Not established<br><strong>Authenticity:</strong> Not established<br><strong>Detection confidence:</strong> ${o.score===null?'Manually outlined':Math.round(o.score*100)+'% (generic object category only)'}</p><p><strong>Individual-object identification:</strong> analyze only the pixels inside this outline. Category guesses are not maker or authenticity verification.</p><div id="identityResult" class="identity-result">${o.identity?esc(o.identity.summary):o.identifying?'Automatic category identification in progress…':'Awaiting automatic identification.'}</div><section class="visual-search"><h3>Find matching items online</h3><p>Use the cropped item photo with Google Lens. Visual results open outside Shelf Scout and are clues, not verified identification or sold-price evidence.</p><div class="visual-actions"><button type="button" id="shareLens" class="primary">Share item photo</button><button type="button" id="saveCrop" class="secondary">Save cropped photo</button><button type="button" id="openLens" class="secondary">Open Google Lens</button><button type="button" id="textSearch" class="secondary">Search by description</button></div><p id="visualHelp" class="visual-help" aria-live="polite">On iPhone: try Share item photo → Google or Chrome (if available). Otherwise save the crop, open Google Lens, and upload the saved image.</p></section><label for="itemName">Item description</label><input id="itemName" maxlength="140" value="${esc(o.name)}"><label for="itemNotes">Marks / details / notes</label><input id="itemNotes" value="${esc(o.notes||'')}" placeholder="e.g. makers mark under base"><div class="actions"><button id="identifyItem" class="primary">Identify this item</button><button id="saveFav" class="primary">${saved?'♥ Update favorite':'♡ Save favorite'}</button><button id="removeItem" class="secondary">Remove outline</button><button id="adjustItem" class="secondary">Redraw outline</button></div>`;$('detail').hidden=false;if(o.identity)renderIdentity($('identityResult'),o.identity);try{$('itemCrop').src=itemCrop(o).toDataURL('image/jpeg',.85)}catch{} $('shareLens').onclick=()=>shareItemCrop(o);$('saveCrop').onclick=()=>saveItemCrop(o);$('openLens').onclick=()=>window.open('https://lens.google.com/','_blank','noopener,noreferrer');$('textSearch').onclick=()=>{const query=[o.name,o.notes||''].filter(Boolean).join(' ').replace(/\bcandidate\b/gi,'').trim();window.open('https://www.google.com/search?tbm=isch&q='+encodeURIComponent(query),'_blank','noopener,noreferrer')};$('identifyItem').onclick=()=>identify(o);$('itemName').oninput=e=>{o.name=e.target.value;paint()};$('itemNotes').oninput=e=>o.notes=e.target.value;$('saveFav').onclick=()=>{const f=favorites.findIndex(x=>x.id===o.id),record={...o,savedAt:new Date().toISOString()};if(f<0)favorites.push(record);else favorites[f]=record;try{localStorage.setItem(key,JSON.stringify(favorites));setStatus('Saved to favorites on this device.')}catch{setStatus('Unable to save favorites: browser storage is full.')}count();showItem(o)};$('removeItem').onclick=()=>{items=items.filter(x=>x!==o);$('detail').hidden=true;active=null;paint()};$('adjustItem').onclick=()=>{$('detail').hidden=true;active=null;items=items.filter(x=>x!==o);paint();toggleDraw(true);setStatus('Redraw the outline by dragging around the item.')}}
+function showItem(o){active=o;paint();const saved=favorites.some(f=>f.id===o.id);$('detailContent').innerHTML=`<h2>${esc(o.name)}</h2><img id="itemCrop" class="item-crop" alt="Cropped selected item"><span class="pill">${o.pending?'◌ TENTATIVE · Awaiting local validation':'● YELLOW · Evidence needed'}</span><p><strong>Resale value:</strong> Not researched<br><strong>Maker / age:</strong> Not established<br><strong>Authenticity:</strong> Not established<br><strong>Detection confidence:</strong> ${o.score===null?'Manually outlined':Math.round(o.score*100)+'% (generic object category only)'}</p><p><strong>Individual-object identification:</strong> analyze only the pixels inside this outline. Category guesses are not maker or authenticity verification.</p><div id="identityResult" class="identity-result">${o.identity?esc(o.identity.summary):o.identifying?'Automatic category identification in progress…':'Awaiting automatic identification.'}</div><section class="visual-search"><h3>Find matching items online</h3><p>Use the cropped item photo with Google Lens. Visual results open outside Shelf Scout and are clues, not verified identification or sold-price evidence.</p><div class="visual-actions"><button type="button" id="shareLens" class="primary">Share item photo</button><button type="button" id="saveCrop" class="secondary">Save cropped photo</button><button type="button" id="openLens" class="secondary">Open Google Lens</button><button type="button" id="textSearch" class="secondary">Full Google Images</button><button type="button" id="embeddedSearch" class="secondary">Embedded Google results</button></div><p id="visualHelp" class="visual-help" aria-live="polite">On iPhone: try Share item photo → Google or Chrome (if available). Otherwise save the crop, open Google Lens, and upload the saved image.</p></section><label for="itemName">Item description</label><input id="itemName" maxlength="140" value="${esc(o.name)}"><label for="itemNotes">Marks / details / notes</label><input id="itemNotes" value="${esc(o.notes||'')}" placeholder="e.g. makers mark under base"><div class="actions"><button id="identifyItem" class="primary">Identify this item</button><button id="saveFav" class="primary">${saved?'♥ Update favorite':'♡ Save favorite'}</button><button id="removeItem" class="secondary">Remove outline</button><button id="adjustItem" class="secondary">Redraw outline</button></div>`;$('detail').hidden=false;if(o.identity)renderIdentity($('identityResult'),o.identity);try{$('itemCrop').src=itemCrop(o).toDataURL('image/jpeg',.85)}catch{} $('shareLens').onclick=()=>shareItemCrop(o);$('saveCrop').onclick=()=>saveItemCrop(o);$('openLens').onclick=()=>window.open('https://lens.google.com/','_blank','noopener,noreferrer');$('textSearch').onclick=()=>{const query=[o.name,o.notes||''].filter(Boolean).join(' ').replace(/\bcandidate\b/gi,'').trim();window.open('https://www.google.com/search?tbm=isch&q='+encodeURIComponent(query),'_blank','noopener,noreferrer')};$('embeddedSearch').onclick=()=>openEmbeddedGoogle(o);$('identifyItem').onclick=()=>identify(o);$('itemName').oninput=e=>{o.name=e.target.value;paint()};$('itemNotes').oninput=e=>o.notes=e.target.value;$('saveFav').onclick=()=>{const f=favorites.findIndex(x=>x.id===o.id),record={...o,savedAt:new Date().toISOString()};if(f<0)favorites.push(record);else favorites[f]=record;try{localStorage.setItem(key,JSON.stringify(favorites));setStatus('Saved to favorites on this device.')}catch{setStatus('Unable to save favorites: browser storage is full.')}count();showItem(o)};$('removeItem').onclick=()=>{items=items.filter(x=>x!==o);$('detail').hidden=true;active=null;paint()};$('adjustItem').onclick=()=>{$('detail').hidden=true;active=null;items=items.filter(x=>x!==o);paint();toggleDraw(true);setStatus('Redraw the outline by dragging around the item.')}}
+
+
+// v1.3.1: Optional official Google Programmable Search Element.
+// Uses a public search-engine identifier; never scrape Google's HTML or embed google.com in an iframe.
+const googlePanel=$('googleSearchPanel'),googleMessage=$('googleMessage');
+let googleLoader=null,googleRendered=false,googleCxInUse='';
+const cxStorage='shelf-scout-google-cx-v1';
+let storedCx='';try{storedCx=localStorage.getItem(cxStorage)||''}catch{}
+$('googleCx').value=storedCx;
+function googleQueryFor(o){return [o.name,o.notes||''].filter(Boolean).join(' ').replace(/\bcandidate\b/gi,'').replace(/\s+/g,' ').trim()||'vintage collectible';}
+function setGoogleMessage(t){googleMessage.textContent=t;}
+function goExternalImageSearch(){const q=$('googleQuery').value.trim();if(q)window.open('https://www.google.com/search?udm=2&q='+encodeURIComponent(q),'_blank','noopener,noreferrer');}
+function openEmbeddedGoogle(o){
+  $('detail').hidden=true;googlePanel.hidden=false;
+  $('googleQuery').value=googleQueryFor(o);
+  $('googleSetup').open=!storedCx;
+  setGoogleMessage(storedCx?'Ready to search the configured sites.':'Set up your free Google Programmable Search Engine to display results here.');
+  if(storedCx)runEmbeddedGoogle();
+}
+$('closeGoogleSearch').onclick=()=>{googlePanel.hidden=true;};
+$('externalGoogleImages').onclick=goExternalImageSearch;
+$('saveGoogleCx').onclick=()=>{
+ const cx=$('googleCx').value.trim();
+ if(!/^[a-zA-Z0-9_:.-]{8,150}$/.test(cx)){setGoogleMessage('That does not look like a valid search engine ID. Copy the Search engine ID from your Google control panel.');return;}
+ try{localStorage.setItem(cxStorage,cx)}catch{}
+ storedCx=cx;googleLoader=null;
+ setGoogleMessage('Search engine ID saved on this device. Tap Search configured sites.');
+ if(googleRendered&&googleCxInUse!==cx){setGoogleMessage('Search engine changed. Reload this page once to activate the new engine ID.');}
+ else runEmbeddedGoogle();
+};
+$('runGoogleSearch').onclick=runEmbeddedGoogle;
+function googleSearchElement(){return window.google?.search?.cse?.element;}
+async function loadEmbeddedGoogle(cx){
+ if(googleRendered)return;
+ if(googleLoader)return googleLoader;
+ googleLoader=new Promise((resolve,reject)=>{
+  const script=document.createElement('script');script.async=true;
+  script.src='https://cse.google.com/cse.js?cx='+encodeURIComponent(cx);
+  script.onerror=()=>reject(new Error('Google search could not load. Check content blockers and your connection.'));
+  script.onload=()=>resolve();
+  document.head.append(script);
+ }).catch(e=>{googleLoader=null;throw e});
+ await googleLoader;
+ // Google's loader initializes asynchronously after the script is downloaded.
+ const started=Date.now();
+ while(!googleSearchElement()?.render){
+  if(Date.now()-started>10000)throw new Error('Google search did not initialize. Check your search engine configuration.');
+  await new Promise(r=>setTimeout(r,150));
+ }
+ googleSearchElement().render({div:'googleResults',tag:'search',gname:'shelfscout',attributes:{enableImageSearch:true,defaultToImageSearch:true}});
+ googleRendered=true;googleCxInUse=cx;
+}
+async function runEmbeddedGoogle(){
+ const q=$('googleQuery').value.trim();if(!q){setGoogleMessage('Enter a search phrase first.');return;}
+ if(!storedCx){$('googleSetup').open=true;setGoogleMessage('First save the Search engine ID from your free Google Programmable Search Engine.');return;}
+ if(googleRendered&&googleCxInUse!==storedCx){setGoogleMessage('Reload the page once to use the changed search-engine ID.');return;}
+ setGoogleMessage('Loading Google-powered results…');
+ try{
+  await loadEmbeddedGoogle(storedCx);
+  const e=googleSearchElement()?.getElement('shelfscout');
+  if(!e||typeof e.execute!=='function')throw new Error('Google search widget did not expose a search control. Try its built-in search box below.');
+  e.execute(q);setGoogleMessage('Showing Google results for: '+q+'. These are search matches, not authenticated items or sold-price confirmations.');
+ }catch(e){setGoogleMessage(e.message+' You can still use Full Google Images.');}
+}
 
 // v1.3: user-mediated reverse image search, no uploads to Shelf Scout or paid API.
 // A Google Lens website cannot be automatically supplied a canvas image through a supported public API.
