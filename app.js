@@ -1,6 +1,6 @@
 (()=>{'use strict';
 const $=id=>document.getElementById(id),img=$('shelfImage'),video=$('camera'),boxes=$('boxes'),status=$('status');
-let model=null,items=[],active=null,cameraStream=null,draw=false,drawOrigin=null,imageObjectUrl=null,busy=false;
+let model=null,items=[],active=null,cameraStream=null,draw=false,drawOrigin=null,imageObjectUrl=null,busy=false,scanEpoch=0;
 const key='shelf-scout-favorites-v1';let favorites=[];try{favorites=JSON.parse(localStorage.getItem(key)||'[]')}catch{};
 const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,7);const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const setStatus=s=>status.textContent=s;const count=()=> $('favoriteCount').textContent=favorites.length;count();
@@ -51,8 +51,8 @@ function paint(){
  }
  boxes.append(layer,markerLayer);
 }
-function showItem(o){active=o;paint();const saved=favorites.some(f=>f.id===o.id);$('detailContent').innerHTML=`<h2>${esc(o.name)}</h2><img id="itemCrop" class="item-crop" alt="Cropped selected item"><span class="pill">${o.pending?'◌ TENTATIVE · Awaiting local validation':'● YELLOW · Evidence needed'}</span><p><strong>Resale value:</strong> Not researched<br><strong>Maker / age:</strong> Not established<br><strong>Authenticity:</strong> Not established<br><strong>Detection confidence:</strong> ${o.score===null?'Manually outlined':Math.round(o.score*100)+'% (generic object category only)'}</p><p><strong>Individual-object identification:</strong> analyze only the pixels inside this outline. Category guesses are not maker or authenticity verification.</p><div id="identityResult" class="identity-result">${o.identity?esc(o.identity.summary):'Not analyzed yet.'}</div><label for="itemName">Item description</label><input id="itemName" maxlength="140" value="${esc(o.name)}"><label for="itemNotes">Marks / details / notes</label><input id="itemNotes" value="${esc(o.notes||'')}" placeholder="e.g. makers mark under base"><div class="actions"><button id="identifyItem" class="primary">Identify this item</button><button id="saveFav" class="primary">${saved?'♥ Update favorite':'♡ Save favorite'}</button><button id="removeItem" class="secondary">Remove outline</button><button id="adjustItem" class="secondary">Redraw outline</button></div>`;$('detail').hidden=false;try{$('itemCrop').src=itemCrop(o).toDataURL('image/jpeg',.85)}catch{} $('identifyItem').onclick=()=>identify(o);$('itemName').oninput=e=>{o.name=e.target.value;paint()};$('itemNotes').oninput=e=>o.notes=e.target.value;$('saveFav').onclick=()=>{const f=favorites.findIndex(x=>x.id===o.id),record={...o,savedAt:new Date().toISOString()};if(f<0)favorites.push(record);else favorites[f]=record;try{localStorage.setItem(key,JSON.stringify(favorites));setStatus('Saved to favorites on this device.')}catch{setStatus('Unable to save favorites: browser storage is full.')}count();showItem(o)};$('removeItem').onclick=()=>{items=items.filter(x=>x!==o);$('detail').hidden=true;active=null;paint()};$('adjustItem').onclick=()=>{$('detail').hidden=true;active=null;items=items.filter(x=>x!==o);paint();toggleDraw(true);setStatus('Redraw the outline by dragging around the item.')}}
-function reset(){items=[];$('detail').hidden=true;active=null;paint()};function add(name,score,x,y,w,h,pending=false){const entry={id:uid(),name,score,x,y,w,h,notes:'',pending};items.push(entry);return entry}
+function showItem(o){active=o;paint();const saved=favorites.some(f=>f.id===o.id);$('detailContent').innerHTML=`<h2>${esc(o.name)}</h2><img id="itemCrop" class="item-crop" alt="Cropped selected item"><span class="pill">${o.pending?'◌ TENTATIVE · Awaiting local validation':'● YELLOW · Evidence needed'}</span><p><strong>Resale value:</strong> Not researched<br><strong>Maker / age:</strong> Not established<br><strong>Authenticity:</strong> Not established<br><strong>Detection confidence:</strong> ${o.score===null?'Manually outlined':Math.round(o.score*100)+'% (generic object category only)'}</p><p><strong>Individual-object identification:</strong> analyze only the pixels inside this outline. Category guesses are not maker or authenticity verification.</p><div id="identityResult" class="identity-result">${o.identity?esc(o.identity.summary):o.identifying?'Automatic category identification in progress…':'Awaiting automatic identification.'}</div><label for="itemName">Item description</label><input id="itemName" maxlength="140" value="${esc(o.name)}"><label for="itemNotes">Marks / details / notes</label><input id="itemNotes" value="${esc(o.notes||'')}" placeholder="e.g. makers mark under base"><div class="actions"><button id="identifyItem" class="primary">Identify this item</button><button id="saveFav" class="primary">${saved?'♥ Update favorite':'♡ Save favorite'}</button><button id="removeItem" class="secondary">Remove outline</button><button id="adjustItem" class="secondary">Redraw outline</button></div>`;$('detail').hidden=false;try{$('itemCrop').src=itemCrop(o).toDataURL('image/jpeg',.85)}catch{} $('identifyItem').onclick=()=>identify(o);$('itemName').oninput=e=>{o.name=e.target.value;paint()};$('itemNotes').oninput=e=>o.notes=e.target.value;$('saveFav').onclick=()=>{const f=favorites.findIndex(x=>x.id===o.id),record={...o,savedAt:new Date().toISOString()};if(f<0)favorites.push(record);else favorites[f]=record;try{localStorage.setItem(key,JSON.stringify(favorites));setStatus('Saved to favorites on this device.')}catch{setStatus('Unable to save favorites: browser storage is full.')}count();showItem(o)};$('removeItem').onclick=()=>{items=items.filter(x=>x!==o);$('detail').hidden=true;active=null;paint()};$('adjustItem').onclick=()=>{$('detail').hidden=true;active=null;items=items.filter(x=>x!==o);paint();toggleDraw(true);setStatus('Redraw the outline by dragging around the item.')}}
+function reset(){scanEpoch++;items=[];$('detail').hidden=true;active=null;paint()};function add(name,score,x,y,w,h,pending=false){const entry={id:uid(),name,score,x,y,w,h,notes:'',pending};items.push(entry);return entry}
 // OWL-ViT zero-shot detector. Unlike COCO-SSD, it searches our collectible-specific prompts.
 let modelLoadPromise=null;
 const prompts=[
@@ -107,35 +107,64 @@ const identityPrompts=[
  ['Ornament','a decorative ornament'],
  ['Other houseware','a household decoration']
 ];
-async function identify(o){
- const target=$('identityResult'),btn=$('identifyItem');btn.disabled=true;
- target.textContent='Analyzing only this item’s cropped image…';
+// Local categorization is not model/maker identification. Use the *item crop only*.
+async function classifyCrop(o){
+ const detector=await getModel(),crop=itemCrop(o);
+ let raw;
+ try { raw=await detector(crop.toDataURL('image/jpeg',.78),identityPrompts.map(x=>x[1]),{threshold:.04,top_k:35}); }
+ finally {crop.width=0;crop.height=0}
+ const scores=new Map();
+ for(const hit of raw){
+  const idx=identityPrompts.findIndex(p=>p[1]===hit.label);if(idx<0)continue;
+  const group=identityPrompts[idx][0],score=Number(hit.score)||0;
+  scores.set(group,Math.max(score,scores.get(group)||0));
+ }
+ const ranked=[...scores].sort((a,b)=>b[1]-a[1]);
+ const best=ranked[0],runner=ranked[1];
+ const uncertain=!best||best[1]<.10||(runner&&best[1]-runner[1]<.025);
+ const summary=uncertain?'Visual category uncertain. A clearer close-up is needed.':
+  'Tentative visual category: '+best[0]+'. Maker, pattern, age, and authenticity remain unverified.';
+ return {summary,candidates:ranked.slice(0,3).map(([name,score])=>({name,score})),uncertain};
+}
+async function identify(o,automatic=false){
+ if(o.identifying)return;
+ o.identifying=true;
+ const isDisplayed=()=>active===o&&!$('detail').hidden;
+ let target=isDisplayed()?$('identityResult'):null;
+ let btn=isDisplayed()?$('identifyItem'):null;
+ if(btn)btn.disabled=true;
+ if(target)target.textContent='Analyzing only this item’s cropped image…';
  try{
-  const detector=await getModel(),crop=itemCrop(o);
-  let raw;
-  try{raw=await detector(crop.toDataURL('image/jpeg',.86),identityPrompts.map(x=>x[1]),{threshold:.04,top_k:45})}
-  finally{crop.width=0;crop.height=0}
-  // Keep candidate matches that substantially overlap the selected item crop.
-  const scores=new Map();
-  for(const hit of raw){
-   const idx=identityPrompts.findIndex(p=>p[1]===hit.label);if(idx<0)continue;
-   const group=identityPrompts[idx][0],score=Number(hit.score)||0;
-   scores.set(group,Math.max(score,scores.get(group)||0));
+  const identity=await classifyCrop(o);
+  o.identity=identity;
+  if(isDisplayed()){
+   target=$('identityResult');target.replaceChildren();
+   const message=document.createElement('p');message.textContent=identity.summary;target.append(message);
+   if(identity.candidates.length){const small=document.createElement('small');small.textContent='Visual matches: '+identity.candidates.map(c=>c.name+' ('+Math.round(c.score*100)+' match score)').join(' · ')+'. Scores are not certainty percentages.';target.append(small)}
   }
-  const ranked=[...scores].sort((a,b)=>b[1]-a[1]);
-  const best=ranked[0],runner=ranked[1];
-  // Weak/no matches are explicitly uncertain. These are relative visual matches,
-  // NOT calibrated probabilities of correct identity.
-  const uncertain=!best||best[1]<.10||(runner&&best[1]-runner[1]<.025);
-  const summary=uncertain?'Uncertain visual category. Take a closer photo or correct the description.':
-   'Likely visual category: '+best[0]+'. This is a tentative visual match, not a verified identification.';
-  o.identity={summary,candidates:ranked.slice(0,3).map(([name,score])=>({name,score})),uncertain};
-  // Do not overwrite manual edits; keep the original detection name to preserve evidence.
-  target.replaceChildren();
-  const message=document.createElement('p');message.textContent=summary;target.append(message);
-  if(ranked.length){const small=document.createElement('small');small.textContent='Other visual matches: '+ranked.slice(0,3).map(([name,score])=>name+' ('+Math.round(score*100)+' match score)').join(' · ')+'. Scores are not certainty percentages.';target.append(small)}
- }catch(e){console.error(e);target.textContent='Item-only analysis unavailable: '+(e?.message||String(e))}
- finally{btn.disabled=false}
+ }catch(e){console.warn('Local identification failed',e);if(isDisplayed())$('identityResult').textContent='Local category analysis unavailable: '+(e?.message||String(e));}
+ finally{o.identifying=false;if(isDisplayed())$('identifyItem').disabled=false;}
+}
+// Priority is a *heuristic about distinctiveness*, not an appraisal or resale forecast.
+function priority(o){
+ const s=(o.name||'').toLowerCase();
+ let n=Number(o.score)||0;
+ if(/figurine|statue|ornament|trinket|sculpture|doll|vintage|pottery|decorative|novelty|cake/.test(s))n+=1;
+ if(/vase|teapot|pitcher|jar/.test(s))n+=.5;
+ return n;
+}
+async function identifyValidatedInBackground(validatedItems,epoch){
+ const queue=validatedItems.filter(o=>items.includes(o)&&!o.pending).sort((a,b)=>priority(b)-priority(a));
+ // Conserve Safari memory and battery: first six distinct candidates automatically.
+ const autoQueue=queue.slice(0,6);
+ for(let i=0;i<autoQueue.length;i++){
+  if(epoch!==scanEpoch)return;
+  const o=autoQueue[i];if(!items.includes(o))continue;
+  setStatus(`Detection validated. Local category identification ${i+1}/${autoQueue.length}… Manufacturer, age and resale value are not verified.`);
+  await identify(o,true);
+  await new Promise(resolve=>requestAnimationFrame(()=>setTimeout(resolve,0)));
+ }
+ if(epoch===scanEpoch)setStatus(`Scan complete: ${validatedItems.length} validated outlines; ${autoQueue.length} items categorized locally. Tap any item for details or to analyze more. Maker, age and sold-price research not yet connected.`);
 }
 function nameFromPrompt(label){return label.replace(/^a (small |vintage |decorative |collectible )*/,'').replace(/^an /,'').replace(/^(ceramic|porcelain|glass|pottery) /,'$1 ')+' candidate';}
 function overlap(a,b){const ix=Math.max(0,Math.min(a.x+a.w,b.x+b.w)-Math.max(a.x,b.x)),iy=Math.max(0,Math.min(a.y+a.h,b.y+b.h)-Math.max(a.y,b.y));return ix*iy/(a.w*a.h+b.w*b.h-ix*iy||1)}
@@ -225,7 +254,7 @@ async function scan(){
  try{
   if(!video.hidden){const c=document.createElement('canvas');c.width=video.videoWidth;c.height=video.videoHeight;c.getContext('2d').drawImage(video,0,0);img.src=c.toDataURL('image/jpeg',.85);img.hidden=false;video.hidden=true;stopCamera();await img.decode();c.width=0;c.height=0;}
   if(!img.complete||!img.naturalWidth)throw Error('Load a photograph first.');
-  reset();const m=await getModel(),w=img.naturalWidth,h=img.naturalHeight;
+  reset();const epoch=scanEpoch;const m=await getModel(),w=img.naturalWidth,h=img.naturalHeight;
   setStatus('Analyzing shelf with collectible-specific visual prompts…');
   let found=await detectPart(m,0,0,w,h,768);
   // A closer pass can help small objects, but cap at two broad halves to protect iPhone memory.
@@ -245,7 +274,7 @@ async function scan(){
   // Limit second-pass work to protect iPhone memory, battery and wait time.
   // Reject unvalidated detections rather than asserting they are real objects.
   const cap=12,checked=candidates.slice(0,cap);
-  let rejected=candidates.length-checked.length,errors=0,validated=0;
+  let rejected=candidates.length-checked.length,errors=0,validated=0;const accepted=[];
   // Show provisional results as soon as the first detector finishes.
   // A dotted border is validation status, NOT an estimated resale valuation.
   const pending=checked.map(p=>add(p.name,p.score,p.x,p.y,p.w,p.h,true));
@@ -258,7 +287,7 @@ async function scan(){
    const entry=pending[i];
    try{
     const validity=await validateCandidate(m,checked[i]);
-    if(validity.keep){entry.pending=false;validated++}
+    if(validity.keep){entry.pending=false;validated++;accepted.push(entry)}
     else {items=items.filter(x=>x!==entry);rejected++;if(active===entry){active=null;$('detail').hidden=true}}
    }catch(e){console.warn('Candidate validation failed',e);errors++;rejected++;items=items.filter(x=>x!==entry);if(active===entry){active=null;$('detail').hidden=true}}
    paint();
@@ -267,7 +296,9 @@ async function scan(){
    // Allow touch input and display refresh between candidates.
    await new Promise(resolve=>requestAnimationFrame(()=>setTimeout(resolve,0)));
   }
-  paint();setStatus(`Validation complete: ${validated} solid outlines from ${candidates.length} candidates; withheld ${rejected}${errors?' ('+errors+' errors)':''}. Local check took ${((performance.now()-started)/1000).toFixed(1)}s. No sold-price data is connected.`);
+  paint();setStatus(`Validation complete: ${validated} solid outlines from ${candidates.length} candidates; withheld ${rejected}${errors?' ('+errors+' errors)':''}. Starting local item categories…`);
+  // Start after rendering. The scan remains usable while item categories update.
+  void identifyValidatedInBackground(accepted,epoch);
  }catch(e){console.error(e);setStatus('OWL-ViT detection failed: '+(e?.message||String(e))+'. Try disabling closer inspection, use Wi-Fi, or draw items manually.');}
  finally{busy=false;$('scanBtn').disabled=false;}
 }
