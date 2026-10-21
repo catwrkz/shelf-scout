@@ -1,4 +1,4 @@
-/* Shelf Scout Quick Valuation v0.2. Local-only screenshot processing and user-led research. */
+/* Shelf Scout Quick Valuation v0.3. Local-only screenshot processing and user-led research. */
 (() => {
   'use strict';
   const $ = id => document.getElementById(id);
@@ -17,90 +17,66 @@
   async function readFile(file,demo=false){if(!file)return; if(!file.type.startsWith('image/')){toast('Please select an image screenshot.');return}if(file.size>30e6){toast('Please choose a photo under 30 MB.');return}
     reset();s.demo=demo;s.sourceName=file.name||'Screenshot';const image=new Image();const u=URL.createObjectURL(file);s.loadedImageURL=u;image.src=u;
     try{await image.decode()}catch(e){toast('Could not open that image.');return}
-    s.image=image;dom.screenshot.src=u;dom.hero.classList.add('hidden');dom.workbench.classList.remove('hidden');dom.result.classList.remove('hidden');status('Finding listing photos and reading text…',true);
-    const w=image.naturalWidth,h=image.naturalHeight;
-    s.regions=[makeRegion({x:.045,y:.12,w:.91,h:clamp((w*.91)/h,.22,.63)},'','','Main photo (suggested)')];
+    s.image=image;dom.screenshot.src=u;dom.hero.classList.add('hidden');dom.workbench.classList.remove('hidden');dom.result.classList.remove('hidden');status('Finding image card boundaries…',true);
+    try {const cards=window.QVImageCards?.fromImage(image)||[];
+      s.regions=cards.map(box=>makeRegion(box,'','','Photo card · visually located'));
+    }catch(e){console.warn('Image card detection failed',e);s.regions=[];}
+    if(!s.regions.length){const w=image.naturalWidth,h=image.naturalHeight;
+      s.regions=[makeRegion({x:.045,y:.12,w:.91,h:clamp((w*.91)/h,.22,.63)},'','','Manual crop · no card boundary found')];
+      status('No clear photo card boundaries found. Adjust the crop manually.');
+    } else status(`Found ${s.regions.length} photo card${s.regions.length===1?'':'s'} from image boundaries. Reading listing details…`,true);
+    dom.modeLabel.textContent=s.regions.length>1?`Feed · ${s.regions.length} image cards`:'One image card';
     s.selected=0;drawRegions();selectRegion(0,false);dom.workbench.scrollIntoView({behavior:'smooth',block:'start'});
-    if(s.demo){loadDemoRegions();return}
+    if(s.demo){loadDemoRegions();return;}
     await doOcr();
   }
-  function loadDemoRegions(){s.regions=[makeRegion({x:.04,y:.09,w:.43,h:.30},'$12.00','Brown ceramic souvenir mug','Sample feed item'),makeRegion({x:.52,y:.09,w:.43,h:.30},'$8.00','Holiday coffee mug','Sample feed item'),makeRegion({x:.04,y:.49,w:.43,h:.30},'$5.00','Ceramic kitchen cup','Sample feed item'),makeRegion({x:.52,y:.49,w:.43,h:.30},'$9.00','Decorative pottery mug','Sample feed item')];s.regions.forEach(r=>r.price=money(r.price));dom.modeLabel.textContent='Sample feed · 4 items';status('Sample screenshot loaded. Select an item to test the workflow.');drawRegions();selectRegion(0,false)}
+  function loadDemoRegions(){
+    // The sample runs through the SAME pixel-based boundary detector as uploads.
+    // Captions/prices below are reference text from the provided sample image,
+    // not claimed as OCR output or independent resale evidence.
+    const known=[['Cute figurine','3.00'],['American Vintage','8.00'],['Christmas mug','2.00'],['Vintage Style Mid Century M…','9.00']];
+    s.regions.forEach((r,i)=>{if(known[i]){r.title=known[i][0];r.price=known[i][1];r.mode='Image card · sample caption';}});
+    dom.modeLabel.textContent=`Sample feed · ${s.regions.length} detected images`;
+    status(`Detected ${s.regions.length} image cards from your Vinted sample. Sample titles and asking prices prefilled; crops are computer-detected.`);
+    drawRegions();selectRegion(0,false);
+  }
   async function getOcrEngine(){if(!window.Tesseract){await new Promise((resolve,reject)=>{const sc=document.createElement('script');sc.src='https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js';sc.onload=resolve;sc.onerror=()=>reject(new Error('OCR library could not download'));document.head.append(sc)})}if(!s.ocrPromise){s.ocrPromise=Tesseract.createWorker('eng',1,{logger:m=>{if(m.status==='recognizing text'&&m.progress!==undefined)status(`Reading screenshot text… ${Math.round(m.progress*100)}%`,true)}}).catch(err=>{s.ocrPromise=null;throw err})}return s.ocrPromise}
   function groupWords(words){const rows=[];for(const word of words){if(!word.text?.trim()||!word.bbox)continue;const bb=word.bbox,cy=(bb.y0+bb.y1)/2;let row=rows.find(r=>Math.abs(r.cy-cy)<Math.max(14,(bb.y1-bb.y0)*.6));if(!row){row={cy,words:[]};rows.push(row)}row.words.push(word)}return rows.map(r=>{r.words.sort((a,b)=>a.bbox.x0-b.bbox.x0);return {text:r.words.map(w=>w.text).join(' '),bbox:{x0:Math.min(...r.words.map(w=>w.bbox.x0)),y0:Math.min(...r.words.map(w=>w.bbox.y0)),x1:Math.max(...r.words.map(w=>w.bbox.x1)),y1:Math.max(...r.words.map(w=>w.bbox.y1))}}})}
   async function doOcr(){if(!s.image)return;if(s.demo){loadDemoRegions();return}status('Loading local text recognition…',true);try{
     const worker=await getOcrEngine();if(!s.image)return;const img=s.image;const scale=Math.min(1,1800/Math.max(img.naturalWidth,img.naturalHeight));const canvas=document.createElement('canvas');canvas.width=Math.max(1,Math.round(img.naturalWidth*scale));canvas.height=Math.max(1,Math.round(img.naturalHeight*scale));canvas.getContext('2d',{willReadFrequently:true}).drawImage(img,0,0,canvas.width,canvas.height);
-    const out=await worker.recognize(canvas);const data=out.data||{};s.ocrText=data.text||'';let lines=(data.lines?.length?data.lines:groupWords(data.words||[])).filter(l=>l.text?.trim()&&l.bbox).map(l=>({text:sane(l.text),box:{x:l.bbox.x0/canvas.width,y:l.bbox.y0/canvas.height,w:(l.bbox.x1-l.bbox.x0)/canvas.width,h:(l.bbox.y1-l.bbox.y0)/canvas.height}}));s.ocrLines=lines;const priceLines=lines.filter(l=>priceRx.test(l.text));if(priceLines.length)generateCandidates(lines,priceLines);else {dom.modeLabel.textContent='Manual review';status('No prices recognized. Adjust the suggested photo and enter listing details.')}drawRegions();selectRegion(0,false);
+    const out=await worker.recognize(canvas);const data=out.data||{};s.ocrText=data.text||'';let lines=(data.lines?.length?data.lines:groupWords(data.words||[])).filter(l=>l.text?.trim()&&l.bbox).map(l=>({text:sane(l.text),box:{x:l.bbox.x0/canvas.width,y:l.bbox.y0/canvas.height,w:(l.bbox.x1-l.bbox.x0)/canvas.width,h:(l.bbox.y1-l.bbox.y0)/canvas.height}}));s.ocrLines=lines;const priceLines=lines.filter(l=>priceRx.test(l.text));
+    attachTextToImageCards(lines);
+    const found=s.regions.filter(r=>r.price).length;
+    dom.modeLabel.textContent=s.regions.length>1?`Feed · ${s.regions.length} image cards`:'Single photo';
+    status(`Found ${s.regions.length} image card${s.regions.length===1?'':'s'} visually; ${found} asking price${found===1?'':'s'} linked using text recognition. Check or correct details.`);
+    drawRegions();selectRegion(0,false);
   }catch(err){console.warn('Local OCR unavailable',err);dom.modeLabel.textContent='Manual review';status('Automatic text reading unavailable. You can still adjust the crop and enter the price manually.');toast('OCR could not load; manual editing still works.');drawRegions();selectRegion(0,false)}}
   const cleanTitle=text=>sane(text).replace(/\b(?:\d+\s*(?:likes?|views?|saves?|mins?|hours?|days?|km|mi)\b.*)$/i,'').slice(0,100);
   const ignoredTitle=/^(?:facebook|marketplace|vinted|home|search|filter|share|save|seller|message|buy|shipping|delivery|you may also like|recommended|favorites|listings|chat|profile|more|today|yesterday|details|description|condition|like new|new with tags|see more|make offer|buy now|pickup|for you|local|sort by)$/i;
-  /* Feed photo bounds are determined from each listing's caption and the
-     previous row's price—not by centering a fixed rectangle over the price.
-     Keeps separate columns aligned and merges fee-inclusive secondary prices. */
-  function generateCandidates(lines,priceLines){
-    const W=s.image.naturalWidth,H=s.image.naturalHeight,aspect=W/H;
+  // OCR NEVER places photo cards. It only assigns captions and prices to the
+  // image blocks identified from screenshot pixels. This prevents caption and
+  // price positions from pulling crop boundaries across multiple listings.
+  function attachTextToImageCards(lines){
+    const conditions=/^(?:very good|good|fair|new|brand new|like new|used|acceptable|new with tags|new without tags|incl\.?|buyer protection|shipping)$/i;
     const centerX=l=>l.box.x+l.box.w/2;
-    const raw=priceLines.filter(l=>money(l.text)!=='').sort((a,b)=>a.box.y-b.box.y);
-    // An "incl." total and the seller price are usually two lines of one card.
-    let sameRow=raw.some((a,i)=>raw.slice(i+1).some(b=>Math.abs(a.box.y-b.box.y)<.085&&Math.abs(centerX(a)-centerX(b))>.28));
-    const columns=sameRow?2:1;
-    const entries=[];
-    for(const l of raw){
-      const col=columns===2?(centerX(l)<.5?0:1):0;
-      const previous=entries.find(e=>e.col===col&&Math.abs(e.anchor.box.y-l.box.y)<.075);
-      if(previous){
-        // Prefer the actual seller price over fee-inclusive price or postage.
-        const currentBad=/incl|ship|postage|buyer protection|total|with fees/i.test(previous.anchor.text);
-        const newBad=/incl|ship|postage|buyer protection|total|with fees/i.test(l.text);
-        if(currentBad&&!newBad)previous.anchor=l;
-        previous.lines.push(l);
-      }else entries.push({col,anchor:l,lines:[l]});
-    }
-    const conditions=/^(?:very good|good|fair|new|brand new|like new|used|acceptable|new with tags|new without tags|sold|incl\.?|buyer protection|free shipping)$/i;
-    const byCol=Array.from({length:columns},(_,col)=>entries.filter(e=>e.col===col).sort((a,b)=>a.anchor.box.y-b.anchor.box.y));
-    const regions=[];
-    for(let col=0;col<columns;col++){
-      const xx=columns===2?(col===0?.018:.512):.035;
-      const ww=columns===2?.466:.93;
-      let lastPriceBottom=null;
-      for(const e of byCol[col]){
-        if(regions.length>=10)break;
-        const a=e.anchor,priceTop=Math.min(...e.lines.map(l=>l.box.y));
-        const upper=lines.filter(l=>{
-          const yc=l.box.y+l.box.h/2;
-          return centerX(l)>(col===0||columns===1?xx:xx-.01)&&centerX(l)<xx+ww+.01&&
-           yc>priceTop-.14&&yc<priceTop-.018&&!priceRx.test(l.text)&&
-           l.text.length>2&&!ignoredTitle.test(l.text)&&!conditions.test(l.text);
-        }).sort((a,b)=>b.box.y-a.box.y);
-        let titleLine=upper.find(l=>l.box.y>priceTop-.10)||upper[0];
-        // Captions follow the photo. "Very good" and other condition lines
-        // are not titles, and shouldn't be included in the crop.
-        const titleY=titleLine?titleLine.box.y:priceTop-.045;
-        const bottom=clamp(titleY-.008,.10,.97);
-        // Infer the top of the photo from the preceding card in the column.
-        const expectedHeight=clamp((ww*aspect)*1.18,.17,.40);
-        let top=lastPriceBottom===null?bottom-expectedHeight:lastPriceBottom+.023;
-        // On the first row, search/navigation chrome can tell us where photos begin.
-        if(lastPriceBottom===null){
-          const searchBottom=Math.max(0,...lines.filter(l=>/search for items|search for|browse|search/i.test(l.text)&&l.box.y<.22).map(l=>l.box.y+l.box.h));
-          if(searchBottom>.02&&searchBottom<bottom-.09)top=Math.max(top,searchBottom+.017);
-        }
-        top=clamp(top,.025,Math.max(.025,bottom-.11));
-        let height=bottom-top;
-        if(height<.11){top=Math.max(.025,bottom-.18);height=bottom-top}
-        // Do not manufacture photo regions across a huge caption-to-price gap.
-        if(height>.47){top=bottom-.40;height=.40}
-        const title=cleanTitle(titleLine?.text||'');
-        regions.push(makeRegion({x:xx,y:top,w:ww,h:height},money(a.text),title,columns===2?'Feed photo (suggested)':'Listing photo (suggested)'));
-        lastPriceBottom=Math.max(...e.lines.map(l=>l.box.y+l.box.h));
-      }
-    }
-    if(regions.length){
-      // Preserve natural reading order, top-left to bottom-right.
-      regions.sort((a,b)=>Math.abs(a.rect.y-b.rect.y)<.10?a.rect.x-b.rect.x:a.rect.y-b.rect.y);
-      s.regions=regions;
-      const distinct=entries.length;
-      dom.modeLabel.textContent=regions.length>1?`Feed · ${regions.length} possible listings`:'Single listing · 1 possible item';
-      status(`Found ${regions.length} possible listing photo${regions.length===1?'':'s'} from ${raw.length} price line${raw.length===1?'':'s'}. Check crop edges before searching.`);
+    const sorted=lines.slice().sort((a,b)=>a.box.y-b.box.y);
+    for(const region of s.regions){
+      const z=region.rect;const bottom=z.y+z.h;
+      const next=s.regions.filter(r=>r!==region&&Math.abs((r.rect.x+r.rect.w/2)-(z.x+z.w/2))<.15&&r.rect.y>bottom+.02)
+        .sort((a,b)=>a.rect.y-b.rect.y)[0];
+      const yMax=Math.min(next?.rect.y??1,bottom+.205);
+      const relevant=sorted.filter(l=>centerX(l)>z.x+.008&&centerX(l)<z.x+z.w-.008&&l.box.y>bottom-.004&&l.box.y<yMax);
+      let prices=relevant.filter(l=>priceRx.test(l.text));
+      prices.sort((a,b)=>a.box.y-b.box.y);
+      // Source apps often show two prices: base seller asking price and
+      // total including fees. The base price comes first, if available.
+      const base=prices.find(l=>!/incl|ship|postage|buyer protection|total|with fees/i.test(l.text))||prices[0];
+      if(base)region.price=money(base.text);
+      const firstPrice=base?.box.y??yMax;
+      const candidates=relevant.filter(l=>l.box.y<firstPrice-.008&&!priceRx.test(l.text)&&l.text.length>=3&&!ignoredTitle.test(l.text)&&!conditions.test(l.text));
+      const title=candidates.find(l=>l.box.y<=bottom+.095)||candidates[0];
+      if(title)region.title=cleanTitle(title.text);
+      region.mode=base?'Image boundary + OCR price':'Image boundary · check price';
     }
   }
   function drawRegions(){if(!s.image)return;dom.regions.replaceChildren();s.regions.forEach((r,i)=>{const d=document.createElement('button');d.type='button';d.className='region'+(i===s.selected?' selected':'');d.setAttribute('aria-label',`Select item ${i+1}`);const z=r.rect;Object.assign(d.style,{left:`${z.x*100}%`,top:`${z.y*100}%`,width:`${z.w*100}%`,height:`${z.h*100}%`});const marker=document.createElement('span');marker.className='region-tag';marker.textContent=i+1;d.append(marker);d.addEventListener('click',()=>selectRegion(i,false));dom.regions.append(d)});drawSelection();drawCandidateList()}
@@ -147,7 +123,7 @@
   dom.reviewSelected.addEventListener('click',()=>dom.result.scrollIntoView({behavior:'smooth',block:'start'}));
   dom.photoFile.addEventListener('change',()=>{const file=dom.photoFile.files?.[0];if(file)readFile(file,false)});
   dom.changePhoto.addEventListener('click',()=>{reset();dom.hero.classList.remove('hidden');dom.photoFile.value='';dom.hero.scrollIntoView({behavior:'smooth'})});
-  dom.demoBtn.addEventListener('click',async()=>{try{const resp=await fetch('./quick-valuation-demo.png');if(!resp.ok)throw Error('missing');const file=new File([await resp.blob()],'quick-valuation-demo.png',{type:'image/png'});readFile(file,true)}catch(err){toast('Sample photo could not load. Upload your own screenshot instead.')}});
+  dom.demoBtn.addEventListener('click',async()=>{try{const resp=await fetch('./quick-valuation-demo.jpg?v=0300');if(!resp.ok)throw Error('missing');const file=new File([await resp.blob()],'quick-valuation-demo.jpg',{type:'image/jpeg'});readFile(file,true)}catch(err){toast('Sample photo could not load. Upload your own screenshot instead.')}});
   dom.retryOcr.addEventListener('click',()=>doOcr());
   dom.addRegion.addEventListener('click',()=>{if(!s.image)return;const ref=s.regions[s.selected]?.rect||{x:.20,y:.22,w:.6,h:.35};const r=makeRegion({x:clamp(ref.x+.04,0,.7),y:clamp(ref.y+.04,0,.7),w:ref.w,h:ref.h},'','','Manual selection');s.regions.push(r);selectRegion(s.regions.length-1,true);toast('New area created. Drag the border to the item.')});
   [dom.titleInput,dom.priceInput,dom.notesInput].forEach(inp=>inp.addEventListener('input',userEdit));

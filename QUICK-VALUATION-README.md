@@ -1,43 +1,37 @@
-# Shelf Scout — Quick Valuation v0.2
+# Shelf Scout • Quick Valuation v0.3
 
-This is a standalone screenshot-analysis prototype hosted alongside (not replacing) your existing Shelf Scout scanner.
+## What changed
 
-## Deploy from Windows, entirely in the browser
+- **Actual image-card detection**: now detects rectangular, image-rich product-photo blocks from screenshot pixels. It no longer calculates the product crop by subtracting a fixed distance from the recognized price.
+- **Image and OCR are separate**: first identify photographic regions, then (for user-uploaded screenshots) OCR the text underneath to associate titles and base asking prices with those regions.
+- **A clean sample**: `quick-valuation-demo.jpg` is the unannotated Vinted screenshot provided for this test. The demo runs through the same photo detector as any uploaded image. Its known caption and price values are prefilled to make the sample instantly testable, **not claimed to be OCR output**.
+- **Crop corrections preserved**: drag a crop, resize from the four handles, or use the width/height and reset buttons.
+- Continues to run entirely on your device, except for downloading the open-source OCR engine when needed. Cropped photos are shared only to a target you select.
 
-1. Extract `quick-valuation-prototype-v0.2.zip`.
-2. Open https://github.com/catwrkz/shelf-scout and choose **Add file → Upload files**.
-3. Replace these FOUR files in the repository **root**:
+## Install (no Windows software installation)
+
+1. Extract the ZIP file.
+2. Open your existing `catwrkz/shelf-scout` repository on GitHub.
+3. At the **repository root**, upload/replace these FIVE app files:
    - `quick-valuation.html`
    - `quick-valuation.css`
    - `quick-valuation.js`
-   - `quick-valuation-demo.png`
-4. Commit and wait for GitHub Pages deployment to complete.
-5. Open https://catwrkz.github.io/shelf-scout/quick-valuation.html?v=0200 in Safari. The version beside the logo should read `0.2`.
+   - `image-cards.js` (**new; must be uploaded**)
+   - `quick-valuation-demo.jpg` (**new sample file; replaces the old sample's role**)
+4. Optionally upload this `QUICK-VALUATION-README.md` file as well. The previous `quick-valuation-demo.png` is not used anymore; deleting it is optional.
+5. Commit, wait for GitHub Pages to deploy, and visit:
+   `https://catwrkz.github.io/shelf-scout/quick-valuation.html?v=0300`
+6. Tap **Try sample screenshot** to test four photographic cards. Try changing from item 1 to 4, and inspect the cropped-image preview. Then upload your own Vinted/Facebook screenshots.
 
-Do not remove or replace `index.html`, `app.js`, or `styles.css` (your separate Shelf Scout camera scanner).
+## What was tested
 
-## What changed in v0.2
+- The supplied Vinted screenshot returned four image-card regions with boundaries that match the four photographs rather than the titles or prices.
+- An older synthetic two-column screenshot also returned four distinct image cards (regression check).
+- Mobile browser interaction test confirmed that the sample produces four selectable cards and selects the corresponding description and asking price without JavaScript errors.
 
-- For two-column scrolling feeds, infer photo boundaries from title/price locations instead of subtracting a fixed height from the price.
-- Combine a seller's asking price and the fee-inclusive total into one listing instead of treating them as two different products.
-- Better distinguish left and right columns and keep each crop in its own column.
-- Crop handles are 30px wide to make resizing easier on mobile.
-- New **Reset crop**, **± Width**, and **± Height** buttons below the screenshot. You can still drag the selection and its four corners.
-- Tapping a detected item no longer automatically scrolls away from your screenshot. Use **Review selected item** when you're ready to inspect its title, price, and cropped photo.
-- Version-specific JavaScript and stylesheet URLs reduce Safari cache confusion.
+## Limitations
 
-## Test with a real Vinted or Facebook screenshot
-
-1. Choose screenshot and wait for the local text scan.
-2. Check that the suggested boxes cover **only** product photographs, not listing text or the app header.
-3. Tap the desired listing, then adjust its crop as needed using corner handles or the controls below the screenshot.
-4. Tap **Review selected item** to check/correct the asking price and item description.
-5. Optionally share the cropped photo to Google Lens.
-
-## Important scope limits
-
-- This version uses Tesseract.js OCR to infer where listing photographs sit. **It is not an AI-trained marketplace-layout detector**; results depend on OCR accuracy, how the source app displays listings, and screenshot crops. Manual adjustments remain available.
-- The app still does not automatically research Google Lens results, verify maker/authenticity, or retrieve verified sold-price comparisons.
-- OCR executes locally in the browser, but downloads its model on first use; internet access is needed for the external research handoff.
-- No paid APIs. Nothing about your photo is uploaded to the Shelf Scout GitHub site by the app itself. Sharing and clicking external services send data only when you choose those actions.
-- The website does not yet act as an iOS Share Sheet extension; you upload the screenshot through the browser for now.
+- Boundary detection uses on-device pixel/rectangle analysis, **not a trained image-card segmentation model**. Very dark photographs on a dark app, unusual layouts, heavily overlapping UI, scrolling carousels, and single-listing views can still need manual crops.
+- OCR on real screenshots is downloaded at first use and may misread or misassociate a title/price. **Review the extracted values**. The displayed source asking price is not a verified resale value.
+- The original screenshot and images stay local to your browser until you explicitly share a crop.
+- No automatic authentication, online visual match import, or verified sold-price appraisal is implemented.
