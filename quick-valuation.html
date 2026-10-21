@@ -6,13 +6,13 @@
 <meta name="theme-color" content="#101918">
 <meta name="description" content="Quick Valuation: private screenshot preparation and research handoff for resale listings.">
 <title>Quick Valuation • Shelf Scout</title>
-<link rel="stylesheet" href="./quick-valuation.css?v=0102">
-<script src="./quick-valuation.js?v=0102" defer></script>
+<link rel="stylesheet" href="./quick-valuation.css?v=0200">
+<script src="./quick-valuation.js?v=0200" defer></script>
 </head>
 <body>
   <div class="app-shell">
     <header class="topbar">
-      <a class="brand" href="./" aria-label="Shelf Scout home"><span class="brand-icon">◈</span><span><strong>SHELF SCOUT</strong><small>QUICK VALUATION · 0.1</small></span></a>
+      <a class="brand" href="./" aria-label="Shelf Scout home"><span class="brand-icon">◈</span><span><strong>SHELF SCOUT</strong><small>QUICK VALUATION · 0.2</small></span></a>
       <span class="mode-pill"><span class="light-dot"></span> Local-first</span>
     </header>
     <main>
@@ -33,10 +33,11 @@
           <div class="regions" id="regions"></div>
           <div class="selection hidden" id="selection"><span class="grab nw" data-grab="nw"></span><span class="grab ne" data-grab="ne"></span><span class="grab sw" data-grab="sw"></span><span class="grab se" data-grab="se"></span><span class="select-index" id="selectionIndex">1</span></div>
         </div>
-        <div class="helper">Tap an outlined listing to select it. Drag the bright frame to adjust the item photo; drag its corners to resize.</div>
+        <div class="helper">Tap an outlined photo to choose its item. Drag the bright frame to move it or its corners to resize. Each crop should include the photograph, not the listing price.</div>
+        <div class="crop-tools" aria-label="Crop adjustments"><button id="cropReset" type="button">↺ Reset crop</button><button id="cropNarrow" type="button">− Width</button><button id="cropWide" type="button">+ Width</button><button id="cropShort" type="button">− Height</button><button id="cropTall" type="button">+ Height</button></div>
         <div class="candidate-head"><span class="eyebrow">DETECTED LISTINGS</span><span id="modeLabel">Inspecting</span></div>
         <div class="candidate-list" id="candidateList"></div>
-        <div class="toolbar"><button id="addRegion" class="ghost-btn" type="button">+ Select another area</button><button id="retryOcr" class="ghost-btn" type="button">Retry text scan</button></div>
+        <div class="toolbar"><button id="reviewSelected" class="review-btn" type="button">Review selected item ↓</button><button id="addRegion" class="ghost-btn" type="button">+ Select another area</button><button id="retryOcr" class="ghost-btn" type="button">Retry text scan</button></div>
       </section>
 
       <section id="result" class="result hidden" aria-label="Quick Valuation research">
@@ -50,7 +51,7 @@
         <div class="search-buttons"><button id="downloadBtn" type="button">Save crop</button><a href="https://lens.google.com/" target="_blank" rel="noopener noreferrer">Open Lens</a><button id="copyQuery" type="button">Copy search</button></div>
         <div class="search-query"><span class="eyebrow">SEARCH PHRASE</span><div id="searchPhrase">Add a title or details to generate searches.</div></div>
         <div class="marketplace-links"><a id="ebaySold" target="_blank" rel="noopener noreferrer">eBay sold listings <span>↗</span></a><a id="ebayLive" target="_blank" rel="noopener noreferrer">eBay live listings <span>↗</span></a><a id="etsyLink" target="_blank" rel="noopener noreferrer">Etsy <span>↗</span></a><a id="mercariLink" target="_blank" rel="noopener noreferrer">Mercari <span>↗</span></a><a id="poshLink" target="_blank" rel="noopener noreferrer">Poshmark <span>↗</span></a><a id="googleLink" target="_blank" rel="noopener noreferrer">Google Images <span>↗</span></a></div>
-        <div class="fineprint">Quick Valuation v0.1 is a screenshot-extraction and research-handoff prototype. It does not automatically authenticate items, collect Google Lens matches, or calculate verified resale values. Text recognition runs in your browser using an open-source model downloaded on first use. Sharing a crop sends it only to the app you select.</div>
+        <div class="fineprint">Quick Valuation v0.2 is a screenshot-extraction and research-handoff prototype. It does not automatically authenticate items, collect Google Lens matches, or calculate verified resale values. Text recognition runs in your browser using an open-source model downloaded on first use. Sharing a crop sends it only to the app you select.</div>
       </section>
     </main>
     <footer>Built for one find at a time <span>·</span> Free-first <span>·</span> No accounts needed</footer>

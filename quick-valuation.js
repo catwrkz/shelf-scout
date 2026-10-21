@@ -1,8 +1,8 @@
-/* Shelf Scout Quick Valuation v0.1. Local-only screenshot processing and user-led research. */
+/* Shelf Scout Quick Valuation v0.2. Local-only screenshot processing and user-led research. */
 (() => {
   'use strict';
   const $ = id => document.getElementById(id);
-  const dom = Object.fromEntries(['hero','photoFile','demoBtn','changePhoto','workbench','ocrStatus','ocrSpinner','statusText','screenshot','frame','regions','selection','selectionIndex','candidateList','modeLabel','addRegion','retryOcr','result','itemCrop','itemSummary','cropSize','titleInput','priceInput','notesInput','valuationStatus','shareBtn','downloadBtn','copyQuery','searchPhrase','ebaySold','ebayLive','etsyLink','mercariLink','poshLink','googleLink','toast'].map(k=>[k,$(k)]));
+  const dom = Object.fromEntries(['hero','photoFile','demoBtn','changePhoto','workbench','ocrStatus','ocrSpinner','statusText','screenshot','frame','regions','selection','selectionIndex','candidateList','modeLabel','addRegion','retryOcr','result','itemCrop','itemSummary','cropSize','titleInput','priceInput','notesInput','valuationStatus','shareBtn','downloadBtn','copyQuery','cropReset','cropNarrow','cropWide','cropShort','cropTall','reviewSelected','searchPhrase','ebaySold','ebayLive','etsyLink','mercariLink','poshLink','googleLink','toast'].map(k=>[k,$(k)]));
   const s = {image:null,sourceName:'',regions:[],selected:0,ocrText:'',ocrLines:[],ocrPromise:null,toastTimeout:null,drag:null,loadedImageURL:null,demo:false};
   const clamp=(n,lo,hi)=>Math.min(hi,Math.max(lo,n));
   const frac=(n)=>clamp(n,0,1);
@@ -12,7 +12,7 @@
   const money=s=>{const m=String(s||'').replace(/,/g,'').match(/(?:US\s*)?\$\s*(\d+(?:\.\d{1,2})?)|(?:USD\s*)(\d+(?:\.\d{1,2})?)/i);return m?Number(m[1]||m[2]).toFixed(2):''};
   const priceRx=/(?:US\s*)?\$\s*\d+(?:[.,]\d{1,2})?|\bUSD\s*\d+(?:[.,]\d{1,2})?/i;
   function normRect(r){let x=frac(r.x),y=frac(r.y),w=clamp(r.w,.08,1),h=clamp(r.h,.08,1);return {x:clamp(x,0,1-w),y:clamp(y,0,1-h),w,h}}
-  const makeRegion=(box,price='',title='',mode='Suggested item')=>({rect:normRect(box),price,title,notes:'',mode});
+  const makeRegion=(box,price='',title='',mode='Suggested item')=>({rect:normRect(box),suggestedRect:normRect(box),price,title,notes:'',mode});
   function reset(){if(s.loadedImageURL){URL.revokeObjectURL(s.loadedImageURL);s.loadedImageURL=null}s.image=null;s.regions=[];s.selected=0;s.ocrLines=[];s.ocrText='';dom.candidateList.replaceChildren();dom.regions.replaceChildren();dom.result.classList.add('hidden');dom.workbench.classList.add('hidden');dom.selection.classList.add('hidden');}
   async function readFile(file,demo=false){if(!file)return; if(!file.type.startsWith('image/')){toast('Please select an image screenshot.');return}if(file.size>30e6){toast('Please choose a photo under 30 MB.');return}
     reset();s.demo=demo;s.sourceName=file.name||'Screenshot';const image=new Image();const u=URL.createObjectURL(file);s.loadedImageURL=u;image.src=u;
@@ -24,30 +24,87 @@
     if(s.demo){loadDemoRegions();return}
     await doOcr();
   }
-  function loadDemoRegions(){s.regions=[makeRegion({x:.04,y:.09,w:.43,h:.30},'$12.00','Brown ceramic souvenir mug','Sample feed item'),makeRegion({x:.52,y:.09,w:.43,h:.30},'$8.00','Holiday coffee mug','Sample feed item'),makeRegion({x:.04,y:.49,w:.43,h:.30},'$5.00','Ceramic kitchen cup','Sample feed item'),makeRegion({x:.52,y:.49,w:.43,h:.30},'$9.00','Decorative pottery mug','Sample feed item')];s.regions.forEach(r=>r.price=money(r.price));dom.modeLabel.textContent='Sample feed · 4 items';status('Sample screenshot loaded. Select an item to test the workflow.');drawRegions();selectRegion(0,true)}
+  function loadDemoRegions(){s.regions=[makeRegion({x:.04,y:.09,w:.43,h:.30},'$12.00','Brown ceramic souvenir mug','Sample feed item'),makeRegion({x:.52,y:.09,w:.43,h:.30},'$8.00','Holiday coffee mug','Sample feed item'),makeRegion({x:.04,y:.49,w:.43,h:.30},'$5.00','Ceramic kitchen cup','Sample feed item'),makeRegion({x:.52,y:.49,w:.43,h:.30},'$9.00','Decorative pottery mug','Sample feed item')];s.regions.forEach(r=>r.price=money(r.price));dom.modeLabel.textContent='Sample feed · 4 items';status('Sample screenshot loaded. Select an item to test the workflow.');drawRegions();selectRegion(0,false)}
   async function getOcrEngine(){if(!window.Tesseract){await new Promise((resolve,reject)=>{const sc=document.createElement('script');sc.src='https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js';sc.onload=resolve;sc.onerror=()=>reject(new Error('OCR library could not download'));document.head.append(sc)})}if(!s.ocrPromise){s.ocrPromise=Tesseract.createWorker('eng',1,{logger:m=>{if(m.status==='recognizing text'&&m.progress!==undefined)status(`Reading screenshot text… ${Math.round(m.progress*100)}%`,true)}}).catch(err=>{s.ocrPromise=null;throw err})}return s.ocrPromise}
   function groupWords(words){const rows=[];for(const word of words){if(!word.text?.trim()||!word.bbox)continue;const bb=word.bbox,cy=(bb.y0+bb.y1)/2;let row=rows.find(r=>Math.abs(r.cy-cy)<Math.max(14,(bb.y1-bb.y0)*.6));if(!row){row={cy,words:[]};rows.push(row)}row.words.push(word)}return rows.map(r=>{r.words.sort((a,b)=>a.bbox.x0-b.bbox.x0);return {text:r.words.map(w=>w.text).join(' '),bbox:{x0:Math.min(...r.words.map(w=>w.bbox.x0)),y0:Math.min(...r.words.map(w=>w.bbox.y0)),x1:Math.max(...r.words.map(w=>w.bbox.x1)),y1:Math.max(...r.words.map(w=>w.bbox.y1))}}})}
   async function doOcr(){if(!s.image)return;if(s.demo){loadDemoRegions();return}status('Loading local text recognition…',true);try{
     const worker=await getOcrEngine();if(!s.image)return;const img=s.image;const scale=Math.min(1,1800/Math.max(img.naturalWidth,img.naturalHeight));const canvas=document.createElement('canvas');canvas.width=Math.max(1,Math.round(img.naturalWidth*scale));canvas.height=Math.max(1,Math.round(img.naturalHeight*scale));canvas.getContext('2d',{willReadFrequently:true}).drawImage(img,0,0,canvas.width,canvas.height);
-    const out=await worker.recognize(canvas);const data=out.data||{};s.ocrText=data.text||'';let lines=(data.lines?.length?data.lines:groupWords(data.words||[])).filter(l=>l.text?.trim()&&l.bbox).map(l=>({text:sane(l.text),box:{x:l.bbox.x0/canvas.width,y:l.bbox.y0/canvas.height,w:(l.bbox.x1-l.bbox.x0)/canvas.width,h:(l.bbox.y1-l.bbox.y0)/canvas.height}}));s.ocrLines=lines;const priceLines=lines.filter(l=>priceRx.test(l.text));if(priceLines.length)generateCandidates(lines,priceLines);else {dom.modeLabel.textContent='Manual review';status('No prices recognized. Adjust the suggested photo and enter listing details.')}drawRegions();selectRegion(0,true);
-  }catch(err){console.warn('Local OCR unavailable',err);dom.modeLabel.textContent='Manual review';status('Automatic text reading unavailable. You can still adjust the crop and enter the price manually.');toast('OCR could not load; manual editing still works.');drawRegions();selectRegion(0,true)}}
+    const out=await worker.recognize(canvas);const data=out.data||{};s.ocrText=data.text||'';let lines=(data.lines?.length?data.lines:groupWords(data.words||[])).filter(l=>l.text?.trim()&&l.bbox).map(l=>({text:sane(l.text),box:{x:l.bbox.x0/canvas.width,y:l.bbox.y0/canvas.height,w:(l.bbox.x1-l.bbox.x0)/canvas.width,h:(l.bbox.y1-l.bbox.y0)/canvas.height}}));s.ocrLines=lines;const priceLines=lines.filter(l=>priceRx.test(l.text));if(priceLines.length)generateCandidates(lines,priceLines);else {dom.modeLabel.textContent='Manual review';status('No prices recognized. Adjust the suggested photo and enter listing details.')}drawRegions();selectRegion(0,false);
+  }catch(err){console.warn('Local OCR unavailable',err);dom.modeLabel.textContent='Manual review';status('Automatic text reading unavailable. You can still adjust the crop and enter the price manually.');toast('OCR could not load; manual editing still works.');drawRegions();selectRegion(0,false)}}
   const cleanTitle=text=>sane(text).replace(/\b(?:\d+\s*(?:likes?|views?|saves?|mins?|hours?|days?|km|mi)\b.*)$/i,'').slice(0,100);
   const ignoredTitle=/^(?:facebook|marketplace|vinted|home|search|filter|share|save|seller|message|buy|shipping|delivery|you may also like|recommended|favorites|listings|chat|profile|more|today|yesterday|details|description|condition|like new|new with tags|see more|make offer|buy now|pickup|for you|local|sort by)$/i;
-  function generateCandidates(lines,priceLines){const im=s.image,W=im.naturalWidth,H=im.naturalHeight, ratio=W/H;const anchors=priceLines.filter(l=>{const m=money(l.text);return m&&Number(m)>=0}).sort((a,b)=>a.box.y-b.box.y);
-    const compact=[];for(const l of anchors){if(!compact.some(t=>Math.abs(t.box.y-l.box.y)<.012&&Math.abs(t.box.x-l.box.x)<.11))compact.push(l)}
-    const isFeed=compact.length>1;const sameRow=compact.some((a,i)=>compact.slice(i+1).some(b=>Math.abs(a.box.y-b.box.y)<.09&&Math.abs(a.box.x-b.box.x)>.28));const cols=sameRow?2:1;const candidates=[];
-    for(let i=0;i<Math.min(8,compact.length);i++){const a=compact[i];const px=money(a.text);let box;
-      if(isFeed){const pad=.03,half=(1-3*pad)/2;const column=cols===2?(a.box.x<.5?0:1):0;const x=cols===2?pad+column*(half+pad):pad;const w=cols===2?half:1-2*pad;const candidateHeight=clamp((w*W/H)*1.04,.11,.46);let y=clamp(a.box.y-candidateHeight-.012,.05,.85);if(y+candidateHeight>1)y=1-candidateHeight;box={x,y,w,h:candidateHeight};
-      }else{const w=.94,x=.03;const desiredH=(w*W/H)*.98;const h=clamp(desiredH,.20,.66);const y=clamp(a.box.y-h-.018,.055,1-h);box={x,y,w,h}}
-      const reference=lines.filter(l=>l!==a && Math.abs(l.box.x-a.box.x)<(cols===2?.25:.70) && Math.abs(l.box.y-a.box.y)<.095 && l.box.y>=a.box.y-.05 && !priceRx.test(l.text) && !ignoredTitle.test(l.text) && l.text.length>3).sort((p,q)=>Math.abs(p.box.y-a.box.y)-Math.abs(q.box.y-a.box.y));
-      const after=lines.filter(l=>l!==a && Math.abs(l.box.x-a.box.x)<(cols===2?.28:.60) && l.box.y>a.box.y && l.box.y<a.box.y+.10 && !priceRx.test(l.text) && !ignoredTitle.test(l.text) && l.text.length>3).sort((p,q)=>p.box.y-q.box.y);
-      const name=cleanTitle((reference[0]||after[0]||{text:''}).text);
-      candidates.push(makeRegion(box,px,name,isFeed?'Feed listing (suggested)':'Main listing (suggested)'));
+  /* Feed photo bounds are determined from each listing's caption and the
+     previous row's price—not by centering a fixed rectangle over the price.
+     Keeps separate columns aligned and merges fee-inclusive secondary prices. */
+  function generateCandidates(lines,priceLines){
+    const W=s.image.naturalWidth,H=s.image.naturalHeight,aspect=W/H;
+    const centerX=l=>l.box.x+l.box.w/2;
+    const raw=priceLines.filter(l=>money(l.text)!=='').sort((a,b)=>a.box.y-b.box.y);
+    // An "incl." total and the seller price are usually two lines of one card.
+    let sameRow=raw.some((a,i)=>raw.slice(i+1).some(b=>Math.abs(a.box.y-b.box.y)<.085&&Math.abs(centerX(a)-centerX(b))>.28));
+    const columns=sameRow?2:1;
+    const entries=[];
+    for(const l of raw){
+      const col=columns===2?(centerX(l)<.5?0:1):0;
+      const previous=entries.find(e=>e.col===col&&Math.abs(e.anchor.box.y-l.box.y)<.075);
+      if(previous){
+        // Prefer the actual seller price over fee-inclusive price or postage.
+        const currentBad=/incl|ship|postage|buyer protection|total|with fees/i.test(previous.anchor.text);
+        const newBad=/incl|ship|postage|buyer protection|total|with fees/i.test(l.text);
+        if(currentBad&&!newBad)previous.anchor=l;
+        previous.lines.push(l);
+      }else entries.push({col,anchor:l,lines:[l]});
     }
-    if(candidates.length){s.regions=candidates;dom.modeLabel.textContent=isFeed?`Feed · ${candidates.length} possible listings`:'Single listing · 1 possible item';status(`Local text scan found ${compact.length} price${compact.length===1?'':'s'}. Confirm photo boundaries and details.`);}
+    const conditions=/^(?:very good|good|fair|new|brand new|like new|used|acceptable|new with tags|new without tags|sold|incl\.?|buyer protection|free shipping)$/i;
+    const byCol=Array.from({length:columns},(_,col)=>entries.filter(e=>e.col===col).sort((a,b)=>a.anchor.box.y-b.anchor.box.y));
+    const regions=[];
+    for(let col=0;col<columns;col++){
+      const xx=columns===2?(col===0?.018:.512):.035;
+      const ww=columns===2?.466:.93;
+      let lastPriceBottom=null;
+      for(const e of byCol[col]){
+        if(regions.length>=10)break;
+        const a=e.anchor,priceTop=Math.min(...e.lines.map(l=>l.box.y));
+        const upper=lines.filter(l=>{
+          const yc=l.box.y+l.box.h/2;
+          return centerX(l)>(col===0||columns===1?xx:xx-.01)&&centerX(l)<xx+ww+.01&&
+           yc>priceTop-.14&&yc<priceTop-.018&&!priceRx.test(l.text)&&
+           l.text.length>2&&!ignoredTitle.test(l.text)&&!conditions.test(l.text);
+        }).sort((a,b)=>b.box.y-a.box.y);
+        let titleLine=upper.find(l=>l.box.y>priceTop-.10)||upper[0];
+        // Captions follow the photo. "Very good" and other condition lines
+        // are not titles, and shouldn't be included in the crop.
+        const titleY=titleLine?titleLine.box.y:priceTop-.045;
+        const bottom=clamp(titleY-.008,.10,.97);
+        // Infer the top of the photo from the preceding card in the column.
+        const expectedHeight=clamp((ww*aspect)*1.18,.17,.40);
+        let top=lastPriceBottom===null?bottom-expectedHeight:lastPriceBottom+.023;
+        // On the first row, search/navigation chrome can tell us where photos begin.
+        if(lastPriceBottom===null){
+          const searchBottom=Math.max(0,...lines.filter(l=>/search for items|search for|browse|search/i.test(l.text)&&l.box.y<.22).map(l=>l.box.y+l.box.h));
+          if(searchBottom>.02&&searchBottom<bottom-.09)top=Math.max(top,searchBottom+.017);
+        }
+        top=clamp(top,.025,Math.max(.025,bottom-.11));
+        let height=bottom-top;
+        if(height<.11){top=Math.max(.025,bottom-.18);height=bottom-top}
+        // Do not manufacture photo regions across a huge caption-to-price gap.
+        if(height>.47){top=bottom-.40;height=.40}
+        const title=cleanTitle(titleLine?.text||'');
+        regions.push(makeRegion({x:xx,y:top,w:ww,h:height},money(a.text),title,columns===2?'Feed photo (suggested)':'Listing photo (suggested)'));
+        lastPriceBottom=Math.max(...e.lines.map(l=>l.box.y+l.box.h));
+      }
+    }
+    if(regions.length){
+      // Preserve natural reading order, top-left to bottom-right.
+      regions.sort((a,b)=>Math.abs(a.rect.y-b.rect.y)<.10?a.rect.x-b.rect.x:a.rect.y-b.rect.y);
+      s.regions=regions;
+      const distinct=entries.length;
+      dom.modeLabel.textContent=regions.length>1?`Feed · ${regions.length} possible listings`:'Single listing · 1 possible item';
+      status(`Found ${regions.length} possible listing photo${regions.length===1?'':'s'} from ${raw.length} price line${raw.length===1?'':'s'}. Check crop edges before searching.`);
+    }
   }
-  function drawRegions(){if(!s.image)return;dom.regions.replaceChildren();s.regions.forEach((r,i)=>{const d=document.createElement('button');d.type='button';d.className='region'+(i===s.selected?' selected':'');d.setAttribute('aria-label',`Select item ${i+1}`);const z=r.rect;Object.assign(d.style,{left:`${z.x*100}%`,top:`${z.y*100}%`,width:`${z.w*100}%`,height:`${z.h*100}%`});const marker=document.createElement('span');marker.className='region-tag';marker.textContent=i+1;d.append(marker);d.addEventListener('click',()=>selectRegion(i,true));dom.regions.append(d)});drawSelection();drawCandidateList()}
-  function drawCandidateList(){dom.candidateList.replaceChildren();s.regions.forEach((r,i)=>{const btn=document.createElement('button');btn.type='button';btn.className='candidate'+(i===s.selected?' active':'');const idx=document.createElement('b');idx.textContent=i+1;const content=document.createElement('span');const head=document.createElement('strong');head.textContent=r.title||`Item ${i+1} · needs review`;const detail=document.createElement('small');detail.textContent=[r.price?`Asking $${r.price}`:'Price unknown',r.mode].join(' · ');content.append(head,detail);const chev=document.createElement('span');chev.className='chev';chev.textContent='›';btn.append(idx,content,chev);btn.addEventListener('click',()=>selectRegion(i,true));dom.candidateList.append(btn)})}
+  function drawRegions(){if(!s.image)return;dom.regions.replaceChildren();s.regions.forEach((r,i)=>{const d=document.createElement('button');d.type='button';d.className='region'+(i===s.selected?' selected':'');d.setAttribute('aria-label',`Select item ${i+1}`);const z=r.rect;Object.assign(d.style,{left:`${z.x*100}%`,top:`${z.y*100}%`,width:`${z.w*100}%`,height:`${z.h*100}%`});const marker=document.createElement('span');marker.className='region-tag';marker.textContent=i+1;d.append(marker);d.addEventListener('click',()=>selectRegion(i,false));dom.regions.append(d)});drawSelection();drawCandidateList()}
+  function drawCandidateList(){dom.candidateList.replaceChildren();s.regions.forEach((r,i)=>{const btn=document.createElement('button');btn.type='button';btn.className='candidate'+(i===s.selected?' active':'');const idx=document.createElement('b');idx.textContent=i+1;const content=document.createElement('span');const head=document.createElement('strong');head.textContent=r.title||`Item ${i+1} · needs review`;const detail=document.createElement('small');detail.textContent=[r.price?`Asking $${r.price}`:'Price unknown',r.mode].join(' · ');content.append(head,detail);const chev=document.createElement('span');chev.className='chev';chev.textContent='›';btn.append(idx,content,chev);btn.addEventListener('click',()=>selectRegion(i,false));dom.candidateList.append(btn)})}
   function selectRegion(i,scroll){if(!s.regions[i])return;s.selected=i;drawRegions();const r=s.regions[i];dom.titleInput.value=r.title;dom.priceInput.value=r.price;dom.notesInput.value=r.notes;updatePreview();updateLinks();if(scroll)dom.result.scrollIntoView({behavior:'smooth',block:'start'})}
   function drawSelection(){const r=s.regions[s.selected];if(!r){dom.selection.classList.add('hidden');return}dom.selection.classList.remove('hidden');dom.selectionIndex.textContent=s.selected+1;Object.assign(dom.selection.style,{left:`${r.rect.x*100}%`,top:`${r.rect.y*100}%`,width:`${r.rect.w*100}%`,height:`${r.rect.h*100}%`})}
   function imageCrop(maxEdge=900){const im=s.image,r=s.regions[s.selected];if(!im||!r)return null;const z=r.rect,W=im.naturalWidth,H=im.naturalHeight;const sx=Math.round(z.x*W),sy=Math.round(z.y*H),sw=Math.max(1,Math.round(z.w*W)),sh=Math.max(1,Math.round(z.h*H));const factor=Math.min(1,maxEdge/Math.max(sw,sh));const c=document.createElement('canvas');c.width=Math.max(1,Math.round(sw*factor));c.height=Math.max(1,Math.round(sh*factor));const ctx=c.getContext('2d');ctx.drawImage(im,sx,sy,sw,sh,0,0,c.width,c.height);return c}
@@ -76,8 +133,18 @@
         if(k.includes('s'))r.h=clamp(o.h+dy,.08,1-o.y);
       }s.regions[s.selected].rect=r;drawSelection();});
     const end=e=>{if(!s.drag||e.pointerId!==s.drag.pid)return;s.drag=null;updatePreview()};sel.addEventListener('pointerup',end);sel.addEventListener('pointercancel',end);
-    frame.addEventListener('click',e=>{if(!s.image||e.target.closest('.selection')||e.target.closest('.region'))return;const b=frame.getBoundingClientRect(),cx=(e.clientX-b.left)/b.width,cy=(e.clientY-b.top)/b.height,r=s.regions[s.selected];if(!r)return;r.rect=normRect({...r.rect,x:cx-r.rect.w/2,y:cy-r.rect.h/2});drawSelection();updatePreview()});
+    frame.addEventListener('click',e=>{if(!s.image||e.target.closest('.selection')||e.target.closest('.region'))return;const b=dom.screenshot.getBoundingClientRect(),cx=(e.clientX-b.left)/b.width,cy=(e.clientY-b.top)/b.height;const ix=s.regions.findIndex(r=>cx>=r.rect.x&&cx<=r.rect.x+r.rect.w&&cy>=r.rect.y&&cy<=r.rect.y+r.rect.h);if(ix>=0)selectRegion(ix,false);});
   }
+  // One-tap adjustments make cropping possible even on smaller screens.
+  function changeCrop(dx,dy){const r=s.regions[s.selected];if(!r)return;const z=r.rect,cx=z.x+z.w/2,cy=z.y+z.h/2;
+    const w=clamp(z.w+dx,.12,1),h=clamp(z.h+dy,.10,1);
+    r.rect=normRect({x:cx-w/2,y:cy-h/2,w,h});drawSelection();updatePreview();}
+  dom.cropNarrow.addEventListener('click',()=>changeCrop(-.045,0));
+  dom.cropWide.addEventListener('click',()=>changeCrop(.045,0));
+  dom.cropShort.addEventListener('click',()=>changeCrop(0,-.035));
+  dom.cropTall.addEventListener('click',()=>changeCrop(0,.035));
+  dom.cropReset.addEventListener('click',()=>{const r=s.regions[s.selected];if(!r)return;r.rect={...r.suggestedRect};drawSelection();updatePreview();toast('Crop reset to suggested photo bounds.')});
+  dom.reviewSelected.addEventListener('click',()=>dom.result.scrollIntoView({behavior:'smooth',block:'start'}));
   dom.photoFile.addEventListener('change',()=>{const file=dom.photoFile.files?.[0];if(file)readFile(file,false)});
   dom.changePhoto.addEventListener('click',()=>{reset();dom.hero.classList.remove('hidden');dom.photoFile.value='';dom.hero.scrollIntoView({behavior:'smooth'})});
   dom.demoBtn.addEventListener('click',async()=>{try{const resp=await fetch('./quick-valuation-demo.png');if(!resp.ok)throw Error('missing');const file=new File([await resp.blob()],'quick-valuation-demo.png',{type:'image/png'});readFile(file,true)}catch(err){toast('Sample photo could not load. Upload your own screenshot instead.')}});

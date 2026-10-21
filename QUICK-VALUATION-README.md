@@ -1,40 +1,43 @@
-# Shelf Scout — Quick Valuation prototype v0.1
+# Shelf Scout — Quick Valuation v0.2
 
-This is a **separate experimental tool** for single-item resale research from iPhone screenshots. It does **not change or overwrite** the existing Shelf Scout shelf scanner.
+This is a standalone screenshot-analysis prototype hosted alongside (not replacing) your existing Shelf Scout scanner.
 
-## Deploy using your existing GitHub Pages account (no Windows installations)
+## Deploy from Windows, entirely in the browser
 
-1. Extract `quick-valuation-v0.1.zip` on Windows.
+1. Extract `quick-valuation-prototype-v0.2.zip`.
 2. Open https://github.com/catwrkz/shelf-scout and choose **Add file → Upload files**.
-3. Upload these **four** files directly to the repository root, **not** into a subfolder:
+3. Replace these FOUR files in the repository **root**:
    - `quick-valuation.html`
    - `quick-valuation.css`
    - `quick-valuation.js`
    - `quick-valuation-demo.png`
-4. Commit and wait for the Pages deployment to finish.
-5. On your iPhone in Safari, open **https://catwrkz.github.io/shelf-scout/quick-valuation.html?v=0102**.
+4. Commit and wait for GitHub Pages deployment to complete.
+5. Open https://catwrkz.github.io/shelf-scout/quick-valuation.html?v=0200 in Safari. The version beside the logo should read `0.2`.
 
-The existing `index.html`, `app.js`, and `styles.css` remain untouched.
+Do not remove or replace `index.html`, `app.js`, or `styles.css` (your separate Shelf Scout camera scanner).
 
-## Test
+## What changed in v0.2
 
-1. Tap **Try sample screenshot** to test feed selection without any OCR download.
-2. Select one of the sample items. Check that changing items updates the crop and the seller price.
-3. Drag the bright crop box and its corner handles to reposition and resize it.
-4. Change the title or asking price; check the focused marketplace search links.
-5. Upload a real screenshot from Facebook Marketplace or Vinted. Wait for local OCR and check the suggested item regions and prices. **Correct any mistakes before researching.**
-6. Tap **Share cropped photo to Google Lens**, select a compatible share destination, or save the crop and upload it to Google Lens yourself.
+- For two-column scrolling feeds, infer photo boundaries from title/price locations instead of subtracting a fixed height from the price.
+- Combine a seller's asking price and the fee-inclusive total into one listing instead of treating them as two different products.
+- Better distinguish left and right columns and keep each crop in its own column.
+- Crop handles are 30px wide to make resizing easier on mobile.
+- New **Reset crop**, **± Width**, and **± Height** buttons below the screenshot. You can still drag the selection and its four corners.
+- Tapping a detected item no longer automatically scrolls away from your screenshot. Use **Review selected item** when you're ready to inspect its title, price, and cropped photo.
+- Version-specific JavaScript and stylesheet URLs reduce Safari cache confusion.
 
-## Scope and limitations
+## Test with a real Vinted or Facebook screenshot
 
-- The OCR system uses Tesseract.js locally in the browser, downloaded from a public CDN on first run. It can fail without internet access or if Safari runs out of memory. Manual input remains possible.
-- The cropped-photo suggestions are **layout heuristics**, not a trained marketplace listing detector. Price text found in the screenshot helps propose product areas; you may need to adjust the crop manually.
-- The first version does not automatically recognize maker/model or authenticate items. It does not automatically retrieve Google Lens matches, sold-price records, or green/blue valuations. Marketplace links perform ordinary keyword search. A true Google Lens visual search requires a share/upload through Google's supported interface.
-- Nothing in the screenshot, typed title, or cropped image is uploaded to the Shelf Scout hosting server. An optional external search or user-triggered share transmits data to the selected service.
-- Avoid listing personal details in screenshots you plan to share. GitHub Pages is a public host, although files selected in your browser are processed client-side and not placed in the repository.
-- The web prototype does **not** appear in the iPhone system Share Sheet as an app; that requires a separate native share extension or a Shortcuts workflow. For v0.1 open the link and choose a screenshot from Photos.
-- There are no paid API calls. A network connection is needed initially for Tesseract.js and to use external search engines.
+1. Choose screenshot and wait for the local text scan.
+2. Check that the suggested boxes cover **only** product photographs, not listing text or the app header.
+3. Tap the desired listing, then adjust its crop as needed using corner handles or the controls below the screenshot.
+4. Tap **Review selected item** to check/correct the asking price and item description.
+5. Optionally share the cropped photo to Google Lens.
 
-## Technical notes
+## Important scope limits
 
-Static HTML/CSS/JavaScript. Browser-side OCR (Tesseract.js 5.1.1), canvas-based crop, user-adjustable crop with pointer events, editable title and asking price, marketplace search links, share/export via Web Share API.
+- This version uses Tesseract.js OCR to infer where listing photographs sit. **It is not an AI-trained marketplace-layout detector**; results depend on OCR accuracy, how the source app displays listings, and screenshot crops. Manual adjustments remain available.
+- The app still does not automatically research Google Lens results, verify maker/authenticity, or retrieve verified sold-price comparisons.
+- OCR executes locally in the browser, but downloads its model on first use; internet access is needed for the external research handoff.
+- No paid APIs. Nothing about your photo is uploaded to the Shelf Scout GitHub site by the app itself. Sharing and clicking external services send data only when you choose those actions.
+- The website does not yet act as an iOS Share Sheet extension; you upload the screenshot through the browser for now.
